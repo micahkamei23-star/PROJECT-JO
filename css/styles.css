@@ -338,12 +338,13 @@ button.btn-sm { padding: 4px 10px; font-size: 0.78rem; }
 
 #map-canvas-wrapper {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   border: 2px solid var(--border-color);
   border-radius: var(--radius);
   background: #0d0a05;
   position: relative;
   max-height: 600px;
+  cursor: crosshair;
 }
 
 #map-canvas {
@@ -637,4 +638,125 @@ button.btn-sm { padding: 4px 10px; font-size: 0.78rem; }
   #map-editor-container { flex-direction: column; }
   #map-sidebar { width: 100%; }
   .die-btn { width: 58px; height: 58px; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MAP ENGINE — new components
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Tool palette ────────────────────────────────── */
+.tool-palette {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.tool-palette .tile-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px;
+  font-size: 1.3rem;
+  border-radius: var(--radius);
+  background: var(--bg-dark);
+  border: 2px solid var(--border-color);
+  color: var(--text-light);
+  cursor: pointer;
+  transition: border-color .15s, transform .1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-palette .tile-btn:hover  { border-color: var(--accent-gold); }
+.tool-palette .tile-btn.active {
+  border-color: var(--accent-gold);
+  background: var(--bg-panel);
+  transform: scale(1.08);
+}
+
+/* ── Token list ──────────────────────────────────── */
+.token-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.token-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color .15s;
+  font-size: 0.85rem;
+}
+
+.token-list-item:hover   { border-color: var(--accent-gold); }
+.token-list-item.selected {
+  border-color: var(--accent-gold);
+  background: var(--bg-panel);
+}
+
+.token-list-item .token-avatar { font-size: 1.3rem; }
+.token-list-item .token-name   { flex: 1; font-weight: 600; }
+.token-list-item .token-hp     { color: var(--accent-green); font-size: 0.78rem; }
+
+/* ── Selected token panel ────────────────────────── */
+.token-action-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Combat tracker ──────────────────────────────── */
+.combat-tracker {
+  margin-top: 4px;
+}
+
+.combat-round {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent-gold);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.combat-turn-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.combat-turn-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  transition: border-color .15s;
+}
+
+.combat-turn-item.active-turn {
+  border-color: var(--accent-gold);
+  background: var(--bg-panel);
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+
+.combat-avatar { font-size: 1.2rem; }
+.combat-name   { flex: 1; }
+.combat-init   { color: var(--text-muted); font-size: 0.78rem; }
+
+/* ── Map action log (full-width below map) ────────── */
+#tab-map .anim-log {
+  max-height: 150px;
 }

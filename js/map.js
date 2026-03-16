@@ -1,229 +1,332 @@
 /**
- * map.js – Map Customization Tools
- * Tile-based map editor using HTML Canvas.
- * Supports terrain placement, tile editing, and encounter setup.
+ * map.js – Map Editor Coordinator
+ *
+ * Orchestrates the new sub-modules:
+ *   MapEngine    – tile state & data operations
+ *   TileRenderer – canvas drawing
+ *   TokenSystem  – token management & rendering
+ *   CombatSystem – turn order & initiative
+ *   UIControls   – mouse / touch / zoom input
+ *
+ * Public API is kept backward-compatible so existing main.js code continues
+ * to work, plus new methods for tokens and combat.
  */
 
 const MapEditor = (() => {
-  const TILE_SIZE = 40; // pixels per tile
+  'use strict';
 
-  const TILES = {
-    floor:    { label: 'Stone Floor',  icon: '⬜', color: '#4a3f30', border: '#5a4f40' },
-    wall:     { label: 'Wall',         icon: '🟫', color: '#2a1f0f', border: '#1a0f05' },
-    water:    { label: 'Water',        icon: '🟦', color: '#1a3a5a', border: '#1a4a6a' },
-    grass:    { label: 'Grass',        icon: '🟩', color: '#1a3a1a', border: '#2a4a2a' },
-    lava:     { label: 'Lava',         icon: '🟧', color: '#5a1a00', border: '#7a2a00' },
-    door:     { label: 'Door',         icon: '🚪', color: '#3a2010', border: '#6a3a10' },
-    stairs:   { label: 'Stairs',       icon: '🔼', color: '#3a3a2a', border: '#5a5a3a' },
-    chest:    { label: 'Chest',        icon: '📦', color: '#4a3000', border: '#6a5000' },
-    trap:     { label: 'Trap',         icon: '⚠️',  color: '#4a1a00', border: '#7a2a00' },
-    empty:    { label: 'Erase',        icon: '❌', color: 'transparent', border: 'transparent' },
-  };
+  const TILE_SIZE = 40;   // pixels per grid cell (world space)
 
-  const TILE_KEYS = Object.keys(TILES).filter(k => k !== 'empty');
+  let _canvas  = null;
+  let _ctx     = null;
+  let _rafId   = null;
+  let _dirty   = true;
 
-  /** State */
-  let canvas   = null;
-  let ctx      = null;
-  let grid     = [];      // grid[row][col] = tile key or null
-  let cols     = 20;
-  let rows     = 15;
-  let selectedTile = 'floor';
-  let isPainting   = false;
-  let hoveredCell  = null;
+  let _selectedTile  = 'floor';
+  let _onLog         = null;    // (message: string) => void
+  let _onTokenSelect = null;    // (id: number|null) => void
 
-  /** Initialise the canvas and grid. */
+  // ── Initialise ──────────────────────────────────────────────────────────────
+
   function init(canvasEl, mapCols = 20, mapRows = 15) {
-    canvas = canvasEl;
-    ctx    = canvas.getContext('2d');
-    resize(mapCols, mapRows);
-    _bindEvents();
-    render();
+    _canvas = canvasEl;
+    _ctx    = canvasEl.getContext('2d');
+
+    // Initialise tile state
+    MapEngine.initMap(mapCols, mapRows);
+    _syncCanvasSize();
+
+    // Initialise token system
+    TokenSystem.init(
+      MapEngine.width, MapEngine.height,
+      _handleTokenSelected,
+      _handleTokenAction
+    );
+
+    // Initialise combat system (callback wired later by main.js)
+    CombatSystem.init(null);
+
+    // Initialise input layer
+    UIControls.init({
+      tileSize:      TILE_SIZE,
+      onPaint:       _paintCell,
+      onFill:        _fillCell,
+      onRect:        _rectFill,
+      onViewChange:  _markDirty,
+      onPointerDown: (wx, wy) => TokenSystem.handlePointerDown(wx, wy, TILE_SIZE),
+      onPointerMove: (wx, wy) => {
+        const hit = TokenSystem.handlePointerMove(wx, wy, TILE_SIZE);
+        if (hit) _markDirty();
+        return hit;
+      },
+      onPointerUp: () => { TokenSystem.handlePointerUp(); _markDirty(); },
+    });
+    UIControls.bindCanvas(_canvas);
+
+    _startLoop();
   }
 
-  /** Resize (or reset) the map to new dimensions. */
-  function resize(newCols, newRows) {
-    cols = Math.max(5, Math.min(50, newCols));
-    rows = Math.max(5, Math.min(30, newRows));
-    canvas.width  = cols * TILE_SIZE;
-    canvas.height = rows * TILE_SIZE;
-    grid = Array.from({ length: rows }, () => Array(cols).fill(null));
-    render();
+  // ── Render loop ─────────────────────────────────────────────────────────────
+
+  function _startLoop() {
+    if (_rafId) cancelAnimationFrame(_rafId);
+    function loop(ts) {
+      TileRenderer.updateAnimation(ts);
+      if (_dirty || _hasAnimatedTiles()) {
+        render();
+        _dirty = false;
+      }
+      _rafId = requestAnimationFrame(loop);
+    }
+    _rafId = requestAnimationFrame(loop);
   }
 
-  /** Fill the entire map with a given tile type. */
-  function fill(tileKey) {
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        grid[r][c] = tileKey === 'empty' ? null : tileKey;
+  function _hasAnimatedTiles() {
+    const { tiles, width, height } = MapEngine.mapState;
+    for (let r = 0; r < height; r++) {
+      for (let c = 0; c < width; c++) {
+        const t = tiles[r][c];
+        if (t && (t.type === 'water' || t.type === 'lava')) return true;
       }
     }
-    render();
+    return false;
   }
 
-  /** Place a single tile at grid coordinates. */
-  function placeTile(row, col, tileKey) {
-    if (row < 0 || row >= rows || col < 0 || col >= cols) return;
-    grid[row][col] = tileKey === 'empty' ? null : tileKey;
-  }
+  function _markDirty() { _dirty = true; }
 
-  /** Return { row, col } from canvas pixel coordinates. */
-  function pixelToCell(px, py) {
-    return {
-      col: Math.floor(px / TILE_SIZE),
-      row: Math.floor(py / TILE_SIZE),
-    };
-  }
-
-  /** Serialize the map to a JSON-compatible object. */
-  function serialize() {
-    return { cols, rows, grid: grid.map(r => r.slice()) };
-  }
-
-  /** Load a previously serialized map. */
-  function deserialize(data) {
-    if (!data || !data.grid) return;
-    cols = data.cols;
-    rows = data.rows;
-    canvas.width  = cols * TILE_SIZE;
-    canvas.height = rows * TILE_SIZE;
-    grid = data.grid.map(r => r.slice());
-    render();
-  }
-
-  /** Export map as PNG data URL. */
-  function exportPNG() {
-    return canvas.toDataURL('image/png');
-  }
-
-  // ── Rendering ──────────────────────────────────────────────────────────────
+  // ── Rendering ────────────────────────────────────────────────────────────────
 
   function render() {
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!_ctx) return;
+    const { tiles, width: mW, height: mH } = MapEngine.mapState;
 
-    // Background (empty cell base)
-    ctx.fillStyle = '#0d0a05';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    _ctx.save();
+    _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
+
+    // Viewport transform
+    _ctx.translate(UIControls.offsetX, UIControls.offsetY);
+    _ctx.scale(UIControls.scale, UIControls.scale);
+
+    // Dark dungeon background
+    TileRenderer.drawBackground(_ctx, mW * TILE_SIZE, mH * TILE_SIZE);
 
     // Tiles
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const key  = grid[r][c];
-        const x    = c * TILE_SIZE;
-        const y    = r * TILE_SIZE;
-        if (key && TILES[key]) {
-          _drawTile(ctx, x, y, TILES[key]);
+    for (let r = 0; r < mH; r++) {
+      for (let c = 0; c < mW; c++) {
+        const tile = tiles[r][c];
+        if (tile && tile.type) {
+          TileRenderer.drawTile(_ctx, c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, tile.type);
         }
-        // Grid lines
-        ctx.strokeStyle = 'rgba(90,62,27,0.35)';
-        ctx.lineWidth   = 0.5;
-        ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
       }
+    }
+
+    // Grid overlay
+    if (UIControls.showGrid) {
+      TileRenderer.drawGrid(_ctx, mW, mH, TILE_SIZE);
     }
 
     // Hover highlight
-    if (hoveredCell) {
-      const { row, col } = hoveredCell;
-      ctx.fillStyle = 'rgba(200,168,75,0.18)';
-      ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    const hov = UIControls.hoveredCell;
+    if (hov && hov.row >= 0 && hov.row < mH && hov.col >= 0 && hov.col < mW) {
+      TileRenderer.drawHover(_ctx, hov.row, hov.col, TILE_SIZE);
     }
+
+    // Rect-tool preview
+    const rs = UIControls.rectStart, re = UIControls.rectEnd;
+    if (rs && re) {
+      TileRenderer.drawRectPreview(_ctx, rs.row, rs.col, re.row, re.col, TILE_SIZE);
+    }
+
+    // Tokens
+    TokenSystem.drawTokens(_ctx, TILE_SIZE);
+
+    _ctx.restore();
   }
 
-  function _drawTile(ctx, x, y, tile) {
-    // Background fill
-    ctx.fillStyle = tile.color;
-    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+  // ── Canvas sizing ─────────────────────────────────────────────────────────────
 
-    // Subtle inner border
-    ctx.strokeStyle = tile.border;
-    ctx.lineWidth   = 1;
-    ctx.strokeRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
-
-    // Emoji icon centered
-    ctx.font      = `${TILE_SIZE * 0.5}px serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(tile.icon, x + TILE_SIZE / 2, y + TILE_SIZE / 2);
+  function _syncCanvasSize() {
+    _canvas.width  = MapEngine.width  * TILE_SIZE;
+    _canvas.height = MapEngine.height * TILE_SIZE;
   }
 
-  // ── Event binding ───────────────────────────────────────────────────────────
+  // ── Tile painting callbacks (from UIControls) ─────────────────────────────────
 
-  function _getCanvasCoords(evt) {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width  / rect.width;
-    const scaleY = canvas.height / rect.height;
+  function _paintCell(row, col, tool) {
+    if (tool === 'eraser') {
+      MapEngine.setTile(row, col, null);
+    } else {
+      MapEngine.setTile(row, col, _selectedTile);
+    }
+    _markDirty();
+  }
+
+  function _fillCell(row, col) {
+    MapEngine.floodFill(row, col, _selectedTile);
+    _markDirty();
+  }
+
+  function _rectFill(r1, c1, r2, c2) {
+    MapEngine.fillRect(r1, c1, r2, c2, _selectedTile);
+    _markDirty();
+  }
+
+  // ── Token event callbacks ─────────────────────────────────────────────────────
+
+  function _handleTokenSelected(id) {
+    _markDirty();
+    if (_onTokenSelect) _onTokenSelect(id);
+  }
+
+  function _handleTokenAction(tokenId, actionKey, message) {
+    if (_onLog) _onLog(message);
+  }
+
+  // ── Public API – core (backward-compatible) ───────────────────────────────────
+
+  function fill(tileKey) {
+    MapEngine.fillMap(tileKey);
+    _markDirty();
+  }
+
+  function resize(newCols, newRows) {
+    MapEngine.resize(newCols, newRows);
+    _syncCanvasSize();
+    TokenSystem.setMapSize(MapEngine.width, MapEngine.height);
+    _markDirty();
+  }
+
+  function serialize() {
     return {
-      px: (evt.clientX - rect.left) * scaleX,
-      py: (evt.clientY - rect.top)  * scaleY,
+      ...MapEngine.serialize(),
+      tokens: TokenSystem.serialize(),
     };
   }
 
-  function _bindEvents() {
-    canvas.addEventListener('mousedown', e => {
-      isPainting = true;
-      const { px, py } = _getCanvasCoords(e);
-      const cell = pixelToCell(px, py);
-      placeTile(cell.row, cell.col, selectedTile);
-      render();
-    });
+  function deserialize(data) {
+    if (!data) return;
 
-    canvas.addEventListener('mousemove', e => {
-      const { px, py } = _getCanvasCoords(e);
-      const cell = pixelToCell(px, py);
-      hoveredCell = cell;
-      if (isPainting) {
-        placeTile(cell.row, cell.col, selectedTile);
-      }
-      render();
-    });
+    // Support both old format (cols/rows/grid[][]) and new format (width/height/tiles[][])
+    // Old format: { cols, rows, grid: string[][] }
+    // New format: { width, height, tiles: { type, walkable }[][] }
+    if (data.grid && !data.tiles) {
+      // Legacy format → convert
+      MapEngine.initMap(data.cols || 20, data.rows || 15);
+      data.grid.forEach((row, r) =>
+        row.forEach((key, c) => { if (key) MapEngine.setTile(r, c, key); })
+      );
+    } else {
+      MapEngine.deserialize(data);
+    }
 
-    canvas.addEventListener('mouseup',    () => { isPainting = false; });
-    canvas.addEventListener('mouseleave', () => { isPainting = false; hoveredCell = null; render(); });
-
-    // Touch support
-    canvas.addEventListener('touchstart', e => {
-      e.preventDefault();
-      isPainting = true;
-      const touch = e.touches[0];
-      const { px, py } = _getCanvasCoords(touch);
-      const cell = pixelToCell(px, py);
-      placeTile(cell.row, cell.col, selectedTile);
-      render();
-    }, { passive: false });
-
-    canvas.addEventListener('touchmove', e => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      const { px, py } = _getCanvasCoords(touch);
-      const cell = pixelToCell(px, py);
-      if (isPainting) {
-        placeTile(cell.row, cell.col, selectedTile);
-      }
-      render();
-    }, { passive: false });
-
-    canvas.addEventListener('touchend', () => { isPainting = false; });
+    _syncCanvasSize();
+    TokenSystem.setMapSize(MapEngine.width, MapEngine.height);
+    if (data.tokens) TokenSystem.deserialize(data.tokens);
+    _markDirty();
   }
 
+  function exportPNG() {
+    render();
+    return _canvas.toDataURL('image/png');
+  }
+
+  // ── Public API – new features ─────────────────────────────────────────────────
+
+  function setTool(tool) { UIControls.activeTool = tool; }
+  function toggleGrid()  { UIControls.showGrid = !UIControls.showGrid; }
+  function resetView()   { UIControls.resetView(); }
+
+  function addToken(characterId, name, avatar, hp, maxHp, gridCol, gridRow) {
+    const id = TokenSystem.addToken(characterId, name, avatar, hp, maxHp, gridCol, gridRow);
+    _markDirty();
+    return id;
+  }
+
+  function removeToken(id)             { TokenSystem.removeToken(id);           _markDirty(); }
+  function removeTokenByCharId(cid)    { TokenSystem.removeTokenByCharId(cid);  _markDirty(); }
+  function getTokens()                 { return TokenSystem.getAll(); }
+  function getSelectedToken()          { return TokenSystem.getSelected(); }
+
+  function triggerTokenAction(tokenId, actionKey) {
+    TokenSystem.triggerAction(tokenId, actionKey);
+    _markDirty();
+  }
+
+  function startCombat() {
+    const order = CombatSystem.rollInitiativeForTokens(TokenSystem.getAll());
+    if (_onLog && order.length > 0) {
+      _onLog(`⚔️ Combat started! Round 1. Initiative order: ${order.map(p => p.name).join(' → ')}`);
+    }
+    return order;
+  }
+
+  function nextTurn() {
+    const participant = CombatSystem.nextTurn();
+    if (participant && _onLog) {
+      _onLog(`⏭ It is now ${participant.name}'s turn (Round ${CombatSystem.combatState.round}).`);
+    }
+    return participant;
+  }
+
+  function endCombat() {
+    CombatSystem.endCombat();
+    if (_onLog) _onLog('🏳 Combat ended.');
+  }
+
+  function onLog(cb)            { _onLog = cb; }
+  function onTokenSelect(cb)    { _onTokenSelect = cb; }
+  function setCombatCallback(cb){ CombatSystem.init(cb); }
+
   return {
-    TILES,
-    TILE_KEYS,
+    // Legacy constants (used by main.js tile palette)
+    get TILES()     { return TileRenderer.TILE_STYLES; },
+    get TILE_KEYS() { return TileRenderer.TILE_KEYS; },
     TILE_SIZE,
+
+    // Legacy state accessors
+    get selectedTile()      { return _selectedTile; },
+    set selectedTile(v)     { _selectedTile = v; },
+    get cols()              { return MapEngine.width; },
+    get rows()              { return MapEngine.height; },
+    get showGrid()          { return UIControls.showGrid; },
+    get activeTool()        { return UIControls.activeTool; },
+
+    // Core
     init,
-    resize,
+    render,
     fill,
-    placeTile,
-    pixelToCell,
+    resize,
     serialize,
     deserialize,
     exportPNG,
-    render,
-    get selectedTile()      { return selectedTile; },
-    set selectedTile(v)     { selectedTile = v; },
-    get grid()              { return grid; },
-    get cols()              { return cols; },
-    get rows()              { return rows; },
+
+    // Tools & view
+    setTool,
+    toggleGrid,
+    resetView,
+
+    // Tokens
+    addToken,
+    removeToken,
+    removeTokenByCharId,
+    getTokens,
+    getSelectedToken,
+    triggerTokenAction,
+
+    // Combat
+    startCombat,
+    nextTurn,
+    endCombat,
+
+    // Callbacks
+    onLog,
+    onTokenSelect,
+    setCombatCallback,
+
+    // Sub-system access (for advanced use)
+    get tokenSystem()  { return TokenSystem; },
+    get combatSystem() { return CombatSystem; },
+    get engine()       { return MapEngine; },
   };
 })();
 
