@@ -410,8 +410,43 @@
     const canvasEl = $('#map-canvas');
     MapEditor.init(canvasEl, 20, 15);
 
-    // Tile palette
-    const palette = $('#tile-palette');
+    // ── Action log ───────────────────────────────────────────────────────────
+    const logEl = $('#map-action-log');
+    const MAX_LOG_ENTRIES = 50;
+    function appendLog(message) {
+      const li = document.createElement('li');
+      li.textContent = message;
+      if (logEl.querySelector('.text-muted')) logEl.innerHTML = '';
+      logEl.prepend(li);
+      while (logEl.children.length > MAX_LOG_ENTRIES) logEl.removeChild(logEl.lastChild);
+    }
+    MapEditor.onLog(appendLog);
+
+    // ── Tool palette ─────────────────────────────────────────────────────────
+    const toolPalette = $('#tool-palette');
+    Object.entries(UIControls.TOOLS).forEach(([key, tool]) => {
+      const btn = document.createElement('button');
+      btn.className = `tile-btn${key === MapEditor.activeTool ? ' active' : ''}`;
+      btn.textContent = tool.icon;
+      btn.setAttribute('data-tooltip', tool.label);
+      btn.dataset.tool = key;
+      btn.addEventListener('click', () => {
+        MapEditor.setTool(key);
+        $$('#tool-palette .tile-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+      toolPalette.appendChild(btn);
+    });
+
+    $('#btn-toggle-grid').addEventListener('click', () => {
+      MapEditor.toggleGrid();
+      $('#btn-toggle-grid').classList.toggle('active', MapEditor.showGrid);
+    });
+
+    $('#btn-reset-view').addEventListener('click', () => MapEditor.resetView());
+
+    // ── Tile palette ──────────────────────────────────────────────────────────
+    const tilePalette = $('#tile-palette');
     [...MapEditor.TILE_KEYS, 'empty'].forEach(key => {
       const tile = MapEditor.TILES[key] || { icon: '❌', label: 'Erase' };
       const btn  = document.createElement('button');
@@ -421,27 +456,184 @@
       btn.dataset.tile = key;
       btn.addEventListener('click', () => {
         MapEditor.selectedTile = key;
+        // Switch to brush when a tile is selected (unless erase)
+        if (key === 'empty') {
+          MapEditor.setTool('eraser');
+          $$('#tool-palette .tile-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.tool === 'eraser'));
+        } else {
+          const wasEraser = MapEditor.activeTool === 'eraser';
+          if (wasEraser) {
+            MapEditor.setTool('brush');
+            $$('#tool-palette .tile-btn').forEach(b =>
+              b.classList.toggle('active', b.dataset.tool === 'brush'));
+          }
+        }
         $$('#tile-palette .tile-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
       });
-      palette.appendChild(btn);
+      tilePalette.appendChild(btn);
     });
 
-    // Map controls
+    // ── Token management ──────────────────────────────────────────────────────
+    const tokenCharSel  = $('#map-token-char-select');
+    const tokenListEl   = $('#map-token-list');
+
+    function refreshTokenCharSelect() {
+      tokenCharSel.innerHTML = state.characters.length === 0
+        ? '<option value="">— No characters —</option>'
+        : ['<option value="">— Select character —</option>',
+           ...state.characters.map(c =>
+             `<option value="${c.id}">${escHtml(c.name)}</option>`)
+          ].join('');
+    }
+
+    function refreshTokenList() {
+      const tokens = MapEditor.getTokens();
+      if (tokens.length === 0) {
+        tokenListEl.innerHTML = '<p class="text-muted">No tokens on map.</p>';
+        return;
+      }
+      tokenListEl.innerHTML = tokens.map(t =>
+        `<div class="token-list-item${t.id === MapEditor.tokenSystem.selectedId ? ' selected' : ''}"
+              data-id="${t.id}">
+           <span class="token-avatar">${t.avatar}</span>
+           <span class="token-name">${escHtml(t.name)}</span>
+           <span class="token-hp">${t.hp}/${t.maxHp}</span>
+         </div>`
+      ).join('');
+      tokenListEl.querySelectorAll('.token-list-item').forEach(item => {
+        item.addEventListener('click', () => {
+          MapEditor.tokenSystem.selectToken(Number(item.dataset.id));
+        });
+      });
+    }
+
+    $('#btn-add-map-token').addEventListener('click', () => {
+      refreshTokenCharSelect();
+      const charId = Number(tokenCharSel.value);
+      const char   = state.characters.find(c => c.id === charId);
+      if (!char) { alert('Select a character first.'); return; }
+      const col = parseInt($('#map-token-col').value, 10) || 0;
+      const row = parseInt($('#map-token-row').value, 10) || 0;
+      MapEditor.addToken(char.id, char.name, char.avatar, char.currentHp, char.maxHp, col, row);
+      appendLog(`🧙 ${char.name} placed on the map at (${col}, ${row}).`);
+      refreshTokenList();
+    });
+
+    $('#btn-remove-map-token').addEventListener('click', () => {
+      const charId = Number(tokenCharSel.value);
+      const char   = state.characters.find(c => c.id === charId);
+      if (!char) { alert('Select a character first.'); return; }
+      MapEditor.removeTokenByCharId(char.id);
+      appendLog(`🗑 ${char.name} removed from the map.`);
+      refreshTokenList();
+      updateSelectedTokenPanel(null);
+    });
+
+    // ── Selected token panel ──────────────────────────────────────────────────
+    const selPanel  = $('#selected-token-panel');
+    const selAvatar = $('#sel-token-avatar');
+    const selName   = $('#sel-token-name');
+    const selHp     = $('#sel-token-hp');
+
+    function updateSelectedTokenPanel(tokenId) {
+      const token = tokenId ? MapEditor.tokenSystem.getToken(tokenId) : null;
+      if (!token) {
+        selPanel.style.display = 'none';
+        return;
+      }
+      selPanel.style.display = '';
+      selAvatar.textContent  = token.avatar;
+      selName.textContent    = token.name;
+      selHp.textContent      = `HP: ${token.hp} / ${token.maxHp}`;
+      refreshTokenList();
+    }
+
+    MapEditor.onTokenSelect(updateSelectedTokenPanel);
+
+    $('#btn-token-heal').addEventListener('click', () => {
+      const id = MapEditor.tokenSystem.selectedId;
+      if (!id) return;
+      MapEditor.tokenSystem.modifyHp(id, 5);
+      updateSelectedTokenPanel(id);
+      appendLog(`💚 ${MapEditor.tokenSystem.getToken(id)?.name} healed 5 HP.`);
+    });
+
+    $('#btn-token-dmg').addEventListener('click', () => {
+      const id = MapEditor.tokenSystem.selectedId;
+      if (!id) return;
+      MapEditor.tokenSystem.modifyHp(id, -5);
+      updateSelectedTokenPanel(id);
+      appendLog(`🩸 ${MapEditor.tokenSystem.getToken(id)?.name} took 5 damage.`);
+    });
+
+    $$('.token-act-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = MapEditor.tokenSystem.selectedId;
+        if (!id) return;
+        MapEditor.triggerTokenAction(id, btn.dataset.action);
+        updateSelectedTokenPanel(id);
+      });
+    });
+
+    // ── Combat tracker ────────────────────────────────────────────────────────
+    const combatTrackerEl = $('#combat-tracker');
+
+    function renderCombatTracker(state) {
+      if (!state || !state.active || state.turnOrder.length === 0) {
+        combatTrackerEl.innerHTML = '<p class="text-muted">No combat in progress.</p>';
+        return;
+      }
+      combatTrackerEl.innerHTML = `
+        <p class="combat-round">Round ${state.round}</p>
+        <ul class="combat-turn-list">
+          ${state.turnOrder.map((p, i) => `
+            <li class="combat-turn-item${i === state.currentTurn ? ' active-turn' : ''}">
+              <span class="combat-avatar">${p.avatar}</span>
+              <span class="combat-name">${escHtml(p.name)}</span>
+              <span class="combat-init">🎲 ${p.initiative}</span>
+            </li>`).join('')}
+        </ul>`;
+    }
+
+    MapEditor.setCombatCallback(renderCombatTracker);
+    renderCombatTracker(null);
+
+    $('#btn-start-combat').addEventListener('click', () => {
+      const tokens = MapEditor.getTokens();
+      if (tokens.length === 0) { alert('Add tokens to the map first.'); return; }
+      MapEditor.startCombat();
+      renderCombatTracker(MapEditor.combatSystem.combatState);
+    });
+
+    $('#btn-next-turn').addEventListener('click', () => {
+      if (!MapEditor.combatSystem.combatState.active) return;
+      MapEditor.nextTurn();
+      renderCombatTracker(MapEditor.combatSystem.combatState);
+    });
+
+    $('#btn-end-combat').addEventListener('click', () => {
+      MapEditor.endCombat();
+      renderCombatTracker(null);
+    });
+
+    // ── Map controls ──────────────────────────────────────────────────────────
     $('#btn-fill-floor').addEventListener('click', () => MapEditor.fill('floor'));
     $('#btn-fill-wall').addEventListener('click',  () => MapEditor.fill('wall'));
     $('#btn-clear-map').addEventListener('click',  () => MapEditor.fill('empty'));
 
-    // Resize
+    // ── Resize ────────────────────────────────────────────────────────────────
     $('#btn-resize-map').addEventListener('click', () => {
       const c = parseInt($('#map-cols-input').value, 10) || 20;
       const r = parseInt($('#map-rows-input').value, 10) || 15;
-      if (confirm(`Resize map to ${c}×${r}? This will clear the current map.`)) {
+      if (confirm(`Resize map to ${c}×${r}? Tiles outside the new bounds will be lost.`)) {
         MapEditor.resize(c, r);
+        refreshTokenList();
       }
     });
 
-    // Export PNG
+    // ── Export PNG ────────────────────────────────────────────────────────────
     $('#btn-export-map').addEventListener('click', () => {
       const dataUrl = MapEditor.exportPNG();
       const a       = document.createElement('a');
@@ -450,7 +642,7 @@
       a.click();
     });
 
-    // Save / Load JSON
+    // ── Save / Load JSON ──────────────────────────────────────────────────────
     $('#btn-save-map').addEventListener('click', () => {
       const data = JSON.stringify(MapEditor.serialize());
       const blob = new Blob([data], { type: 'application/json' });
@@ -474,6 +666,7 @@
         try {
           const data = JSON.parse(evt.target.result);
           MapEditor.deserialize(data);
+          refreshTokenList();
         } catch {
           alert('Invalid map file.');
         }
@@ -482,13 +675,23 @@
       e.target.value = '';
     });
 
-    // Map info updater
+    // ── Map info updater ──────────────────────────────────────────────────────
     setInterval(() => {
       const infoEl = $('#map-info');
       if (infoEl) {
-        infoEl.textContent = `Size: ${MapEditor.cols} × ${MapEditor.rows} tiles  |  Selected: ${MapEditor.TILES[MapEditor.selectedTile]?.label || 'Erase'}`;
+        const toolLabel = UIControls.TOOLS[MapEditor.activeTool]?.label || MapEditor.activeTool;
+        const tileLabel = MapEditor.TILES[MapEditor.selectedTile]?.label || 'Erase';
+        infoEl.textContent =
+          `Size: ${MapEditor.cols} × ${MapEditor.rows}  |  ` +
+          `Tool: ${toolLabel}  |  Tile: ${tileLabel}`;
       }
     }, 500);
+
+    // ── Refresh token char select when map tab is opened ──────────────────────
+    $('nav button[data-tab="map"]').addEventListener('click', () => {
+      refreshTokenCharSelect();
+      refreshTokenList();
+    });
   }
 
   // ══════════════════════════════════════════════════════════════════════════

@@ -9,6 +9,8 @@
 const Dice            = require('../js/dice.js');
 const CharacterSystem = require('../js/character.js');
 const InventorySystem = require('../js/inventory.js');
+const MapEngine       = require('../js/mapEngine.js');
+const CombatSystem    = require('../js/combatSystem.js');
 
 // ── Minimal test harness ──────────────────────────────────────────────────────
 let passed = 0;
@@ -229,6 +231,211 @@ test('starterInventory() returns non-empty array', () => {
     assert(item.name,          `item missing name: ${JSON.stringify(item)}`);
     assert(item.count >= 0,    `item count invalid: ${item.name}`);
   });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  MAP ENGINE
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\n🗺️  Map Engine');
+
+test('initMap creates correct dimensions', () => {
+  MapEngine.initMap(10, 8);
+  assertEqual(MapEngine.width,  10, 'width should be 10');
+  assertEqual(MapEngine.height,  8, 'height should be 8');
+  assertEqual(MapEngine.mapState.tiles.length, 8, 'should have 8 rows');
+  assertEqual(MapEngine.mapState.tiles[0].length, 10, 'each row should have 10 cols');
+});
+
+test('initMap clamps dimensions to valid range', () => {
+  MapEngine.initMap(1, 1);
+  assert(MapEngine.width  >= 5, 'width should be clamped to minimum 5');
+  assert(MapEngine.height >= 5, 'height should be clamped to minimum 5');
+  MapEngine.initMap(999, 999);
+  assert(MapEngine.width  <= 50, 'width should be clamped to maximum 50');
+  assert(MapEngine.height <= 30, 'height should be clamped to maximum 30');
+});
+
+test('initMap creates empty tiles (null type)', () => {
+  MapEngine.initMap(5, 5);
+  for (let r = 0; r < 5; r++) {
+    for (let c = 0; c < 5; c++) {
+      const tile = MapEngine.getTile(r, c);
+      assert(tile !== null, 'tile object should exist');
+      assertEqual(tile.type, null, 'tile type should be null');
+    }
+  }
+});
+
+test('setTile / getTile round-trip', () => {
+  MapEngine.initMap(10, 10);
+  MapEngine.setTile(2, 3, 'wall');
+  const tile = MapEngine.getTile(2, 3);
+  assertEqual(tile.type, 'wall', 'tile type should be wall');
+  assertEqual(tile.walkable, false, 'wall should not be walkable');
+});
+
+test('setTile with null / empty erases tile', () => {
+  MapEngine.initMap(10, 10);
+  MapEngine.setTile(0, 0, 'floor');
+  MapEngine.setTile(0, 0, null);
+  assertEqual(MapEngine.getTile(0, 0).type, null, 'tile should be null after erase');
+  MapEngine.setTile(1, 1, 'floor');
+  MapEngine.setTile(1, 1, 'empty');
+  assertEqual(MapEngine.getTile(1, 1).type, null, 'tile should be null after empty');
+});
+
+test('getTile returns null for out-of-bounds coordinates', () => {
+  MapEngine.initMap(5, 5);
+  assertEqual(MapEngine.getTile(-1, 0),  null, 'negative row should return null');
+  assertEqual(MapEngine.getTile(0, -1),  null, 'negative col should return null');
+  assertEqual(MapEngine.getTile(99, 0),  null, 'out-of-range row should return null');
+  assertEqual(MapEngine.getTile(0, 99),  null, 'out-of-range col should return null');
+});
+
+test('fillMap sets all tiles to given type', () => {
+  MapEngine.initMap(6, 6);
+  MapEngine.fillMap('floor');
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < 6; c++) {
+      assertEqual(MapEngine.getTile(r, c).type, 'floor', `(${r},${c}) should be floor`);
+    }
+  }
+});
+
+test('floodFill replaces connected region', () => {
+  MapEngine.initMap(5, 5);
+  // Paint the whole map as floor
+  MapEngine.fillMap('floor');
+  // Place a wall in the middle
+  MapEngine.setTile(2, 2, 'wall');
+  // Flood fill from (0,0) with grass — should NOT cross the single wall cell
+  MapEngine.floodFill(0, 0, 'grass');
+  // The entire floor area connected to (0,0) becomes grass
+  assertEqual(MapEngine.getTile(0, 0).type, 'grass', '(0,0) should be grass after fill');
+  // The wall should remain untouched
+  assertEqual(MapEngine.getTile(2, 2).type, 'wall', 'wall should be unchanged');
+});
+
+test('fillRect paints rectangular region', () => {
+  MapEngine.initMap(10, 10);
+  MapEngine.fillRect(1, 1, 3, 4, 'stone');
+  for (let r = 1; r <= 3; r++) {
+    for (let c = 1; c <= 4; c++) {
+      assertEqual(MapEngine.getTile(r, c).type, 'stone', `(${r},${c}) should be stone`);
+    }
+  }
+  // Outside the rect should still be null
+  assertEqual(MapEngine.getTile(0, 0).type, null, 'outside rect should be null');
+});
+
+test('serialize / deserialize round-trip preserves tile data', () => {
+  MapEngine.initMap(8, 6);
+  MapEngine.setTile(0, 0, 'lava');
+  MapEngine.setTile(5, 7, 'water');
+  const snapshot = MapEngine.serialize();
+  MapEngine.initMap(5, 5);  // reset
+  MapEngine.deserialize(snapshot);
+  assertEqual(MapEngine.width,  8, 'width restored');
+  assertEqual(MapEngine.height, 6, 'height restored');
+  assertEqual(MapEngine.getTile(0, 0).type, 'lava',  'lava tile restored');
+  assertEqual(MapEngine.getTile(5, 7).type, 'water', 'water tile restored');
+});
+
+test('TILE_DEFS contains walkability info for all key types', () => {
+  ['floor', 'stone', 'grass', 'door', 'trap', 'stairs'].forEach(type => {
+    assert(MapEngine.TILE_DEFS[type].walkable === true,  `${type} should be walkable`);
+  });
+  ['wall', 'water', 'lava'].forEach(type => {
+    assert(MapEngine.TILE_DEFS[type].walkable === false, `${type} should not be walkable`);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  COMBAT SYSTEM
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\n⚔️  Combat System');
+
+test('rollInitiativeForTokens sorts by initiative descending', () => {
+  const tokens = [
+    { id: 1, name: 'Alice', avatar: '🧝' },
+    { id: 2, name: 'Bob',   avatar: '🧙' },
+    { id: 3, name: 'Carol', avatar: '🗡️' },
+  ];
+  const order = CombatSystem.rollInitiativeForTokens(tokens);
+  assert(Array.isArray(order), 'should return array');
+  assertEqual(order.length, 3, 'should have 3 participants');
+  for (let i = 0; i < order.length - 1; i++) {
+    assert(
+      order[i].initiative >= order[i + 1].initiative,
+      'initiatives should be in descending order'
+    );
+  }
+});
+
+test('rollInitiativeForTokens initialises combat state', () => {
+  const tokens = [{ id: 1, name: 'A', avatar: '🧝' }];
+  CombatSystem.rollInitiativeForTokens(tokens);
+  assert(CombatSystem.combatState.active,            'combat should be active');
+  assertEqual(CombatSystem.combatState.round, 1,      'round should start at 1');
+  assertEqual(CombatSystem.combatState.currentTurn, 0,'currentTurn should start at 0');
+});
+
+test('rollInitiativeForTokens assigns d20 initiative values', () => {
+  const tokens = [
+    { id: 1, name: 'A', avatar: '🧝' },
+    { id: 2, name: 'B', avatar: '🧙' },
+  ];
+  const order = CombatSystem.rollInitiativeForTokens(tokens);
+  order.forEach(p => {
+    assertInRange(p.initiative, 1, 20, `initiative ${p.initiative} should be a d20 value`);
+  });
+});
+
+test('nextTurn advances the current turn', () => {
+  const tokens = [
+    { id: 1, name: 'A', avatar: '🧝' },
+    { id: 2, name: 'B', avatar: '🧙' },
+    { id: 3, name: 'C', avatar: '🗡️' },
+  ];
+  CombatSystem.rollInitiativeForTokens(tokens);
+  assertEqual(CombatSystem.combatState.currentTurn, 0, 'starts at turn 0');
+  CombatSystem.nextTurn();
+  assertEqual(CombatSystem.combatState.currentTurn, 1, 'should advance to turn 1');
+  CombatSystem.nextTurn();
+  assertEqual(CombatSystem.combatState.currentTurn, 2, 'should advance to turn 2');
+});
+
+test('nextTurn wraps around and increments round', () => {
+  const tokens = [
+    { id: 1, name: 'A', avatar: '🧝' },
+    { id: 2, name: 'B', avatar: '🧙' },
+  ];
+  CombatSystem.rollInitiativeForTokens(tokens);
+  assertEqual(CombatSystem.combatState.round, 1, 'starts at round 1');
+  CombatSystem.nextTurn();   // turn 1
+  CombatSystem.nextTurn();   // wraps to turn 0 → round 2
+  assertEqual(CombatSystem.combatState.currentTurn, 0, 'should wrap to turn 0');
+  assertEqual(CombatSystem.combatState.round, 2, 'should increment to round 2');
+});
+
+test('endCombat resets state', () => {
+  const tokens = [{ id: 1, name: 'A', avatar: '🧝' }];
+  CombatSystem.rollInitiativeForTokens(tokens);
+  assert(CombatSystem.combatState.active, 'combat is active before end');
+  CombatSystem.endCombat();
+  assert(!CombatSystem.combatState.active,               'combat should be inactive');
+  assertEqual(CombatSystem.combatState.turnOrder.length, 0, 'turn order should be empty');
+  assertEqual(CombatSystem.combatState.round, 1,            'round should reset to 1');
+});
+
+test('getCurrentParticipant returns null when not in combat', () => {
+  CombatSystem.endCombat();
+  assertEqual(CombatSystem.getCurrentParticipant(), null, 'should be null outside combat');
+});
+
+test('rollInitiativeForTokens returns empty array for no tokens', () => {
+  const result = CombatSystem.rollInitiativeForTokens([]);
+  assert(Array.isArray(result) && result.length === 0, 'should return empty array');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
