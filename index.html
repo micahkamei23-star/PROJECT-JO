@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PROJECT JO – D&D Virtual Tabletop</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <header>
+    <span style="font-size:2rem">🐉</span>
+    <div>
+      <h1>PROJECT JO</h1>
+      <span class="subtitle">Dungeons &amp; Dragons Virtual Tabletop</span>
+    </div>
+  </header>
+
+  <!-- ── Navigation ─────────────────────────────────────────── -->
+  <nav>
+    <button data-tab="dice">🎲 Dice</button>
+    <button data-tab="characters">🧝 Characters</button>
+    <button data-tab="inventory">🎒 Inventory</button>
+    <button data-tab="map">🗺️ Map Editor</button>
+    <button data-tab="animation">✨ Animations</button>
+  </nav>
+
+  <!-- ── Main content ───────────────────────────────────────── -->
+  <main>
+
+    <!-- ════════════════════════════════════════════════════
+         DICE ROLLING PANEL
+         ════════════════════════════════════════════════════ -->
+    <section id="tab-dice" class="tab-panel">
+      <div class="grid-2" style="align-items: start;">
+
+        <!-- Left: roller -->
+        <div class="card">
+          <h2>🎲 Dice Roller</h2>
+
+          <!-- Result display -->
+          <div class="roll-result-box">
+            <div class="roll-value" id="dice-result-value">—</div>
+            <div class="roll-label"  id="dice-result-label">Click a die to roll</div>
+          </div>
+
+          <!-- Die buttons (populated by JS) -->
+          <div class="dice-container" id="dice-buttons"></div>
+
+          <hr class="separator" />
+
+          <!-- Options -->
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="dice-count">Number of dice</label>
+              <input type="number" id="dice-count" value="1" min="1" max="20" />
+            </div>
+            <div class="form-group">
+              <label for="dice-modifier">Modifier</label>
+              <input type="number" id="dice-modifier" value="0" min="-20" max="20" />
+            </div>
+          </div>
+
+          <!-- Custom die -->
+          <div class="flex-row mt-8">
+            <div class="form-group" style="flex:1;margin-bottom:0">
+              <label for="dice-custom-sides">Custom die (sides)</label>
+              <input type="number" id="dice-custom-sides" value="100" min="2" max="1000" />
+            </div>
+            <button class="btn btn-secondary" id="btn-custom-roll" style="align-self:flex-end">Roll Custom</button>
+          </div>
+        </div>
+
+        <!-- Right: history -->
+        <div class="card">
+          <h2>📜 Roll History</h2>
+          <ul class="roll-history" id="dice-history">
+            <li class="text-muted">No rolls yet.</li>
+          </ul>
+          <div class="btn-group mt-12">
+            <button class="btn btn-danger" id="btn-clear-history">Clear History</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════
+         CHARACTER PANEL
+         ════════════════════════════════════════════════════ -->
+    <section id="tab-characters" class="tab-panel">
+      <div class="grid-2" style="align-items: start;">
+
+        <!-- Left: create + list -->
+        <div style="display:flex;flex-direction:column;gap:16px;">
+
+          <div class="card">
+            <h2>➕ Create Character</h2>
+            <div class="form-group">
+              <label for="char-name-input">Character Name</label>
+              <input type="text" id="char-name-input" placeholder="e.g. Thalindra Swiftarrow" />
+            </div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label for="char-class-select">Class</label>
+                <select id="char-class-select"></select>
+              </div>
+              <div class="form-group">
+                <label for="char-race-select">Race</label>
+                <select id="char-race-select"></select>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label for="char-alignment-select">Alignment</label>
+                <select id="char-alignment-select"></select>
+              </div>
+              <div class="form-group">
+                <label for="char-level-input">Starting Level</label>
+                <input type="number" id="char-level-input" value="1" min="1" max="20" />
+              </div>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary" id="btn-create-char">Create Character</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>🧝 Party</h2>
+            <div class="char-list" id="char-list">
+              <p class="text-muted">No characters yet. Create one above.</p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right: character sheet -->
+        <div class="card">
+          <h2>📋 Character Sheet</h2>
+
+          <!-- Avatar + name -->
+          <div class="flex-row mb-8">
+            <span id="sheet-avatar" style="font-size:3rem">🧝</span>
+            <div>
+              <div id="sheet-name"  style="font-size:1.3rem;font-weight:700;color:var(--accent-gold)">Select a character</div>
+              <div id="sheet-class" style="font-size:0.82rem;color:var(--text-muted)"></div>
+            </div>
+          </div>
+
+          <!-- HP -->
+          <div class="hp-bar-wrap"><div class="hp-bar-fill" id="hp-bar-fill" style="width:0%"></div></div>
+          <div class="flex-row mb-8">
+            <span id="hp-display" style="font-size:0.85rem;color:var(--text-muted)">— / — HP</span>
+            <input type="number" id="hp-adjust-input" value="5" min="1" max="999"
+                   style="width:60px;text-align:center" />
+            <button class="btn btn-success btn-sm" id="btn-heal">+ Heal</button>
+            <button class="btn btn-danger  btn-sm" id="btn-damage">− Damage</button>
+            <button class="btn btn-secondary btn-sm" id="btn-level-up">⬆ Level</button>
+          </div>
+
+          <hr class="separator" />
+
+          <!-- Attributes -->
+          <h3>Ability Scores</h3>
+          <div class="stat-grid" id="attr-grid"></div>
+
+          <hr class="separator" />
+
+          <!-- Abilities -->
+          <h3>Class Abilities</h3>
+          <div class="ability-list" id="ability-list"></div>
+
+          <hr class="separator" />
+          <div class="btn-group">
+            <button class="btn btn-danger" id="btn-delete-char">🗑 Delete Character</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════
+         INVENTORY PANEL
+         ════════════════════════════════════════════════════ -->
+    <section id="tab-inventory" class="tab-panel">
+      <div class="grid-2" style="align-items:start;">
+
+        <!-- Add item form -->
+        <div class="card">
+          <h2>➕ Add Item</h2>
+          <div class="form-group">
+            <label for="inv-item-name">Item Name</label>
+            <input type="text" id="inv-item-name" placeholder="e.g. Healing Potion" />
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="inv-item-type">Type</label>
+              <select id="inv-item-type"></select>
+            </div>
+            <div class="form-group">
+              <label for="inv-item-icon">Icon (emoji)</label>
+              <input type="text" id="inv-item-icon" placeholder="🧪" maxlength="4" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="inv-item-count">Quantity</label>
+            <input type="number" id="inv-item-count" value="1" min="1" max="9999" />
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-primary"   id="btn-add-item">Add to Inventory</button>
+            <button class="btn btn-secondary" id="btn-starter-kit">Load Starter Kit</button>
+          </div>
+        </div>
+
+        <!-- Inventory grid -->
+        <div class="card">
+          <h2>🎒 Inventory</h2>
+          <div class="inventory-grid" id="inventory-grid">
+            <p class="text-muted">No items. Add some above.</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════
+         MAP EDITOR PANEL
+         ════════════════════════════════════════════════════ -->
+    <section id="tab-map" class="tab-panel">
+      <div id="map-editor-container">
+
+        <!-- Canvas -->
+        <div id="map-canvas-wrapper">
+          <canvas id="map-canvas"></canvas>
+        </div>
+
+        <!-- Sidebar -->
+        <div id="map-sidebar">
+
+          <div class="card">
+            <h2>🖌 Tiles</h2>
+            <div class="tile-palette" id="tile-palette"></div>
+          </div>
+
+          <div class="card">
+            <h2>⚙️ Controls</h2>
+            <div class="btn-group" style="flex-direction:column;">
+              <button class="btn btn-secondary full-width" id="btn-fill-floor">Fill — Stone Floor</button>
+              <button class="btn btn-secondary full-width" id="btn-fill-wall">Fill — Wall</button>
+              <button class="btn btn-danger    full-width" id="btn-clear-map">Clear Map</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>📐 Resize Map</h2>
+            <div class="grid-2">
+              <div class="form-group">
+                <label for="map-cols-input">Columns</label>
+                <input type="number" id="map-cols-input" value="20" min="5" max="50" />
+              </div>
+              <div class="form-group">
+                <label for="map-rows-input">Rows</label>
+                <input type="number" id="map-rows-input" value="15" min="5" max="30" />
+              </div>
+            </div>
+            <button class="btn btn-secondary full-width" id="btn-resize-map">Apply Resize</button>
+          </div>
+
+          <div class="card">
+            <h2>💾 Import / Export</h2>
+            <div class="btn-group" style="flex-direction:column;">
+              <button class="btn btn-primary   full-width" id="btn-save-map">Save as JSON</button>
+              <button class="btn btn-secondary full-width" id="btn-load-map">Load JSON</button>
+              <button class="btn btn-secondary full-width" id="btn-export-map">Export PNG</button>
+            </div>
+            <input type="file" id="map-file-input" accept=".json" style="display:none" />
+          </div>
+
+          <div class="card">
+            <div class="map-info" id="map-info">Size: 20 × 15 tiles</div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════
+         ANIMATION PANEL
+         ════════════════════════════════════════════════════ -->
+    <section id="tab-animation" class="tab-panel">
+      <div class="grid-2" style="align-items:start;">
+
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="card">
+            <h2>🎭 Stage</h2>
+            <div id="animation-stage"></div>
+            <p class="text-muted mt-8">Character tokens appear on the stage above. Use the controls on the right to trigger actions.</p>
+          </div>
+
+          <div class="card">
+            <h2>📝 Action Log</h2>
+            <ul class="anim-log" id="anim-log">
+              <li class="text-muted">No actions yet.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="card">
+            <h2>🧝 Manage Tokens</h2>
+            <div class="form-group">
+              <label for="anim-char-select">Character</label>
+              <select id="anim-char-select">
+                <option value="">— Create a character first —</option>
+              </select>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary"   id="btn-add-to-stage">Add to Stage</button>
+              <button class="btn btn-danger"    id="btn-remove-from-stage">Remove</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>⚡ Actions</h2>
+            <p class="text-muted mb-8">Select a character above then trigger an action:</p>
+            <div class="btn-group" id="anim-action-buttons" style="flex-direction:column;"></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Scripts ────────────────────────────────────────────── -->
+  <script src="js/dice.js"></script>
+  <script src="js/character.js"></script>
+  <script src="js/inventory.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/animation.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
