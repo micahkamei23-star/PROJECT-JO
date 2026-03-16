@@ -45,7 +45,9 @@ const GameState = (() => {
 
   function _notify(section) {
     _listeners.forEach(fn => {
-      try { fn(section, _state); } catch (_) { /* swallow listener errors */ }
+      try { fn(section, _state); } catch (err) {
+        console.error('[GameState] Listener error in section "' + section + '":', err);
+      }
     });
   }
 
