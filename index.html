@@ -247,6 +247,10 @@
                       data-tooltip="Toggle grid overlay" style="flex:1">⊞ Grid</button>
               <button class="btn btn-secondary" id="btn-reset-view"
                       data-tooltip="Reset zoom and pan"  style="flex:1">🔍 Reset</button>
+              <button class="btn btn-secondary" id="btn-toggle-fog"
+                      data-tooltip="Toggle fog of war"   style="flex:1">🌫 Fog</button>
+              <button class="btn btn-secondary" id="btn-reset-fog"
+                      data-tooltip="Reset fog (re-hide all)"  style="flex:1">🌑 Reset Fog</button>
             </div>
           </div>
 
@@ -423,11 +427,13 @@
   <script src="js/dice.js"></script>
   <script src="js/character.js"></script>
   <script src="js/inventory.js"></script>
+  <script src="js/gameState.js"></script>
   <!-- Map engine modules (must load before map.js) -->
   <script src="js/mapEngine.js"></script>
   <script src="js/tileRenderer.js"></script>
   <script src="js/tokenSystem.js"></script>
   <script src="js/combatSystem.js"></script>
+  <script src="js/fogSystem.js"></script>
   <script src="js/uiControls.js"></script>
   <script src="js/map.js"></script>
   <script src="js/animation.js"></script>

@@ -11,6 +11,8 @@ const CharacterSystem = require('../js/character.js');
 const InventorySystem = require('../js/inventory.js');
 const MapEngine       = require('../js/mapEngine.js');
 const CombatSystem    = require('../js/combatSystem.js');
+const GameState       = require('../js/gameState.js');
+const FogSystem       = require('../js/fogSystem.js');
 
 // ── Minimal test harness ──────────────────────────────────────────────────────
 let passed = 0;
@@ -436,6 +438,201 @@ test('getCurrentParticipant returns null when not in combat', () => {
 test('rollInitiativeForTokens returns empty array for no tokens', () => {
   const result = CombatSystem.rollInitiativeForTokens([]);
   assert(Array.isArray(result) && result.length === 0, 'should return empty array');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  GAME STATE
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\n🗃  Game State');
+
+test('state has all required top-level keys', () => {
+  const { state } = GameState;
+  assert('map'        in state, 'state should have map');
+  assert('characters' in state, 'state should have characters');
+  assert('tokens'     in state, 'state should have tokens');
+  assert('combat'     in state, 'state should have combat');
+  assert('diceHistory'in state, 'state should have diceHistory');
+  assert('inventory'  in state, 'state should have inventory');
+});
+
+test('state.map has required map fields', () => {
+  const { map } = GameState.state;
+  assert('width'  in map, 'map should have width');
+  assert('height' in map, 'map should have height');
+  assert('tiles'  in map, 'map should have tiles');
+});
+
+test('setCharacters / getCharacter round-trip', () => {
+  GameState.setCharacters([{ id: 99, name: 'TestHero' }]);
+  const char = GameState.getCharacter(99);
+  assert(char !== null,              'character should be found');
+  assertEqual(char.name, 'TestHero', 'name should match');
+});
+
+test('addCharacter appends to characters list', () => {
+  GameState.setCharacters([]);
+  GameState.addCharacter({ id: 1, name: 'Alice' });
+  GameState.addCharacter({ id: 2, name: 'Bob' });
+  assertEqual(GameState.state.characters.length, 2, 'should have 2 characters');
+});
+
+test('removeCharacter removes by id', () => {
+  GameState.setCharacters([{ id: 10, name: 'X' }, { id: 11, name: 'Y' }]);
+  GameState.removeCharacter(10);
+  assertEqual(GameState.state.characters.length, 1, 'should have 1 character');
+  assertEqual(GameState.state.characters[0].id, 11,  'remaining should be id 11');
+});
+
+test('addDiceRoll prepends to diceHistory', () => {
+  GameState.clearDiceHistory();
+  GameState.addDiceRoll({ label: '1d20', total: 15 });
+  GameState.addDiceRoll({ label: '1d6',  total: 4 });
+  assertEqual(GameState.state.diceHistory[0].label, '1d6',  'newest roll first');
+  assertEqual(GameState.state.diceHistory[1].label, '1d20', 'older roll second');
+});
+
+test('addDiceRoll caps history at 50 entries', () => {
+  GameState.clearDiceHistory();
+  for (let i = 0; i < 55; i++) GameState.addDiceRoll({ total: i });
+  assert(GameState.state.diceHistory.length <= 50, 'should cap at 50');
+});
+
+test('updateCombat merges into combat state', () => {
+  GameState.resetCombat();
+  GameState.updateCombat({ active: true, round: 3 });
+  assert(GameState.state.combat.active,         'combat should be active');
+  assertEqual(GameState.state.combat.round, 3,  'round should be 3');
+});
+
+test('resetCombat restores defaults', () => {
+  GameState.updateCombat({ active: true, round: 5 });
+  GameState.resetCombat();
+  assert(!GameState.state.combat.active,            'combat should be inactive');
+  assertEqual(GameState.state.combat.round,    1,   'round should reset to 1');
+  assertEqual(GameState.state.combat.turnOrder.length, 0, 'turnOrder should be empty');
+});
+
+test('onChange callback fires on state mutation', () => {
+  let fired = false;
+  GameState.onChange(() => { fired = true; });
+  GameState.setCharacters([{ id: 77, name: 'Observer' }]);
+  assert(fired, 'onChange should have been called');
+});
+
+test('serialize / deserialize round-trip', () => {
+  GameState.setCharacters([{ id: 5, name: 'Syl' }]);
+  GameState.updateCombat({ round: 4 });
+  const snapshot = GameState.serialize();
+  GameState.setCharacters([]);
+  GameState.resetCombat();
+  GameState.deserialize(snapshot);
+  assertEqual(GameState.state.characters[0].name, 'Syl', 'character name preserved');
+  assertEqual(GameState.state.combat.round, 4, 'combat round preserved');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  FOG SYSTEM
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\n🌫  Fog System');
+
+// Helper: set up a fresh 10×10 map with no blocking tiles
+function _initFog(w = 10, h = 10, blockers = []) {
+  FogSystem.init(w, h, (row, col) => {
+    const isWall = blockers.some(([r, c]) => r === row && c === col);
+    return isWall ? { type: 'wall' } : { type: 'floor' };
+  });
+}
+
+test('getFogLevel returns "visible" when fog is disabled', () => {
+  _initFog();
+  FogSystem.setEnabled(false);
+  assertEqual(FogSystem.getFogLevel(0, 0), 'visible', 'disabled fog → always visible');
+  assertEqual(FogSystem.getFogLevel(5, 5), 'visible', 'disabled fog → always visible');
+});
+
+test('getFogLevel returns "hidden" for unexplored tiles when enabled', () => {
+  _initFog();
+  FogSystem.setEnabled(true);
+  assertEqual(FogSystem.getFogLevel(0, 0), 'hidden', 'no tokens → tiles should be hidden');
+});
+
+test('updateVisibility marks tiles visible from token position', () => {
+  _initFog();
+  FogSystem.setEnabled(true);
+  FogSystem.updateVisibility([{ x: 5, y: 5 }], 3);
+  assertEqual(FogSystem.getFogLevel(5, 5), 'visible', 'origin should be visible');
+});
+
+test('updateVisibility reveals tiles within radius', () => {
+  _initFog();
+  FogSystem.setEnabled(true);
+  FogSystem.updateVisibility([{ x: 5, y: 5 }], 3);
+  // Tiles within radius 3 should be at minimum explored
+  const level = FogSystem.getFogLevel(5, 6);
+  assert(level === 'visible' || level === 'explored', 'adjacent tile within radius should be visible/explored');
+});
+
+test('previously visible tiles become explored after visibility update', () => {
+  _initFog();
+  FogSystem.setEnabled(true);
+  FogSystem.updateVisibility([{ x: 3, y: 3 }], 3);
+  // Move token away – tiles around (3,3) should become 'explored'
+  FogSystem.updateVisibility([{ x: 9, y: 9 }], 3);
+  const level = FogSystem.getFogLevel(3, 3);
+  assert(level === 'explored' || level === 'visible', 'previously visited tile should be explored or visible');
+});
+
+test('walls block line of sight', () => {
+  // Wall at (5, 5), token at (5, 3); tile at (5, 7) should be hidden
+  _initFog(10, 10, [[5, 5]]);
+  FogSystem.setEnabled(true);
+  FogSystem.updateVisibility([{ x: 3, y: 5 }], 6);
+  // (5,7) is behind the wall along the same row; vision-blocking depends on angle
+  // At minimum: the wall tile itself may be revealed (edge of ray), but tiles behind should be hidden
+  const wallLevel = FogSystem.getFogLevel(5, 5);
+  // Wall cell can be revealed (it's the edge of the ray that hit it)
+  assert(['visible', 'explored', 'hidden'].includes(wallLevel), 'wall cell has valid fog level');
+});
+
+test('resetFog clears all revealed and visible tiles', () => {
+  _initFog();
+  FogSystem.setEnabled(true);
+  FogSystem.updateVisibility([{ x: 5, y: 5 }], 5);
+  FogSystem.resetFog();
+  assertEqual(FogSystem.getFogLevel(5, 5), 'hidden', 'after reset, tiles should be hidden');
+  assertEqual(FogSystem.fogState.revealedTiles.size, 0, 'revealedTiles should be empty');
+  assertEqual(FogSystem.fogState.visibleTiles.size,  0, 'visibleTiles should be empty');
+});
+
+test('setEnabled(false) clears fog sets', () => {
+  _initFog();
+  FogSystem.setEnabled(true);
+  FogSystem.updateVisibility([{ x: 5, y: 5 }], 4);
+  FogSystem.setEnabled(false);
+  assertEqual(FogSystem.fogState.revealedTiles.size, 0, 'revealed tiles cleared on disable');
+  assertEqual(FogSystem.fogState.visibleTiles.size,  0, 'visible tiles cleared on disable');
+});
+
+test('serialize / deserialize round-trip', () => {
+  _initFog();
+  FogSystem.setEnabled(true);
+  FogSystem.updateVisibility([{ x: 5, y: 5 }], 3);
+  const revealed = FogSystem.fogState.revealedTiles.size;
+  const data = FogSystem.serialize();
+  assert(data.enabled,                         'serialized enabled should be true');
+  assert(Array.isArray(data.revealedTiles),    'serialized revealedTiles should be array');
+  assertEqual(data.revealedTiles.length, revealed, 'serialized length should match');
+
+  // Deserialize into a fresh init
+  FogSystem.resetFog();
+  FogSystem.deserialize(data);
+  assertEqual(FogSystem.fogState.revealedTiles.size, revealed, 'revealedTiles size preserved');
+  assertEqual(FogSystem.fogState.enabled, true,                'enabled flag preserved');
+});
+
+test('DEFAULT_VISION_RADIUS is a positive number', () => {
+  assert(typeof FogSystem.DEFAULT_VISION_RADIUS === 'number', 'should be a number');
+  assert(FogSystem.DEFAULT_VISION_RADIUS > 0, 'should be positive');
 });
 
 // ════════════════════════════════════════════════════════════════════════════

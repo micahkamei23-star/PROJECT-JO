@@ -21,6 +21,7 @@ const UIControls = (() => {
     eraser: { label: 'Eraser',    icon: '🧹', cursor: 'cell' },
     fill:   { label: 'Fill',      icon: '🪣', cursor: 'copy' },
     rect:   { label: 'Rectangle', icon: '⬛', cursor: 'crosshair' },
+    line:   { label: 'Line',      icon: '📏', cursor: 'crosshair' },
   };
 
   // Tool & grid state
@@ -35,6 +36,8 @@ const UIControls = (() => {
   let _isPainting    = false;
   let _rectStart     = null;
   let _rectEnd       = null;
+  let _lineStart     = null;
+  let _lineEnd       = null;
   let _lastTouchDist = 0;
   let _lastTouchMid  = null;
   let _hoveredCell   = null;
@@ -43,6 +46,7 @@ const UIControls = (() => {
   let _onPaint       = null;   // (row, col, tool) => void
   let _onFill        = null;   // (row, col) => void
   let _onRect        = null;   // (r1, c1, r2, c2) => void
+  let _onLine        = null;   // (r1, c1, r2, c2) => void
   let _onViewChange  = null;   // () => void
   let _onPointerDown = null;   // (worldX, worldY) => bool  – true = consumed
   let _onPointerMove = null;   // (worldX, worldY) => bool
@@ -54,6 +58,7 @@ const UIControls = (() => {
     _onPaint       = opts.onPaint       || null;
     _onFill        = opts.onFill        || null;
     _onRect        = opts.onRect        || null;
+    _onLine        = opts.onLine        || null;
     _onViewChange  = opts.onViewChange  || null;
     _onPointerDown = opts.onPointerDown || null;
     _onPointerMove = opts.onPointerMove || null;
@@ -111,6 +116,9 @@ const UIControls = (() => {
     if (_activeTool === 'rect') {
       _rectStart = { row, col };
       _rectEnd   = null;
+    } else if (_activeTool === 'line') {
+      _lineStart = { row, col };
+      _lineEnd   = null;
     } else {
       if (_onPaint) _onPaint(row, col, _activeTool);
     }
@@ -127,6 +135,8 @@ const UIControls = (() => {
     if (_isPainting) {
       if (_activeTool === 'rect') {
         _rectEnd = { row, col };
+      } else if (_activeTool === 'line') {
+        _lineEnd = { row, col };
       } else {
         if (_onPaint) _onPaint(row, col, _activeTool);
       }
@@ -139,9 +149,14 @@ const UIControls = (() => {
     if (_isPainting && _activeTool === 'rect' && _rectStart && _rectEnd) {
       if (_onRect) _onRect(_rectStart.row, _rectStart.col, _rectEnd.row, _rectEnd.col);
     }
+    if (_isPainting && _activeTool === 'line' && _lineStart && _lineEnd) {
+      if (_onLine) _onLine(_lineStart.row, _lineStart.col, _lineEnd.row, _lineEnd.col);
+    }
     _isPainting = false;
     _rectStart  = null;
     _rectEnd    = null;
+    _lineStart  = null;
+    _lineEnd    = null;
   }
 
   function _mouseLeave(canvas, e) {
@@ -179,6 +194,9 @@ const UIControls = (() => {
       if (_activeTool === 'rect') {
         _rectStart = { row, col };
         _rectEnd   = null;
+      } else if (_activeTool === 'line') {
+        _lineStart = { row, col };
+        _lineEnd   = null;
       } else {
         if (_onPaint) _onPaint(row, col, _activeTool);
       }
@@ -186,6 +204,8 @@ const UIControls = (() => {
       _isPainting    = false;
       _rectStart     = null;
       _rectEnd       = null;
+      _lineStart     = null;
+      _lineEnd       = null;
       _lastTouchDist = _dist(e.touches[0], e.touches[1]);
       _lastTouchMid  = _mid(canvas, e.touches[0], e.touches[1]);
     }
@@ -203,6 +223,8 @@ const UIControls = (() => {
       }
       if (_activeTool === 'rect') {
         _rectEnd = { row, col };
+      } else if (_activeTool === 'line') {
+        _lineEnd = { row, col };
       } else if (_onPaint) {
         _onPaint(row, col, _activeTool);
       }
@@ -239,9 +261,14 @@ const UIControls = (() => {
       if (_isPainting && _activeTool === 'rect' && _rectStart && _rectEnd) {
         if (_onRect) _onRect(_rectStart.row, _rectStart.col, _rectEnd.row, _rectEnd.col);
       }
+      if (_isPainting && _activeTool === 'line' && _lineStart && _lineEnd) {
+        if (_onLine) _onLine(_lineStart.row, _lineStart.col, _lineEnd.row, _lineEnd.col);
+      }
       _isPainting = false;
       _rectStart  = null;
       _rectEnd    = null;
+      _lineStart  = null;
+      _lineEnd    = null;
     }
   }
 
@@ -288,6 +315,8 @@ const UIControls = (() => {
     get hoveredCell() { return _hoveredCell; },
     get rectStart()   { return _rectStart; },
     get rectEnd()     { return _rectEnd; },
+    get lineStart()   { return _lineStart; },
+    get lineEnd()     { return _lineEnd; },
     get isPainting()  { return _isPainting; },
     get tileSize()    { return _tileSize; },
     set tileSize(v)   { _tileSize = v; },

@@ -208,6 +208,25 @@ const TileRenderer = (() => {
     ctx.setLineDash([]);
   }
 
+  // ── Line preview (while dragging Line tool) ───────────────────────────────────
+
+  /**
+   * Highlight cells along a Bresenham line from (r1,c1) to (r2,c2).
+   */
+  function drawLinePreview(ctx, r1, c1, r2, c2, tileSize) {
+    const cells = _bresenhamLine(r1, c1, r2, c2);
+    ctx.fillStyle   = 'rgba(200,168,75,0.22)';
+    ctx.strokeStyle = 'rgba(200,168,75,0.70)';
+    ctx.lineWidth   = 1.5;
+    ctx.setLineDash([4, 3]);
+    for (const { row, col } of cells) {
+      const x = col * tileSize, y = row * tileSize;
+      ctx.fillRect(x, y, tileSize, tileSize);
+      ctx.strokeRect(x, y, tileSize, tileSize);
+    }
+    ctx.setLineDash([]);
+  }
+
   // ── Utility ──────────────────────────────────────────────────────────────────
 
   function _lerpColor(hex1, hex2, t) {
@@ -220,6 +239,27 @@ const TileRenderer = (() => {
     return `rgb(${Math.round(r1 + (r2 - r1) * t)},${Math.round(g1 + (g2 - g1) * t)},${Math.round(b1 + (b2 - b1) * t)})`;
   }
 
+  /**
+   * Bresenham's line algorithm.
+   * Returns an array of { row, col } cells from (r1,c1) to (r2,c2) inclusive.
+   */
+  function _bresenhamLine(r1, c1, r2, c2) {
+    const cells = [];
+    let row = r1, col = c1;
+    const dr = Math.abs(r2 - r1), dc = Math.abs(c2 - c1);
+    const sr = r1 < r2 ? 1 : -1,  sc = c1 < c2 ? 1 : -1;
+    let err = dr - dc;
+
+    while (true) {
+      cells.push({ row, col });
+      if (row === r2 && col === c2) break;
+      const e2 = 2 * err;
+      if (e2 > -dc) { err -= dc; row += sr; }
+      if (e2 <  dr) { err += dr; col += sc; }
+    }
+    return cells;
+  }
+
   return {
     TILE_STYLES,
     TILE_KEYS,
@@ -230,6 +270,8 @@ const TileRenderer = (() => {
     drawGrid,
     drawHover,
     drawRectPreview,
+    drawLinePreview,
+    bresenhamLine: _bresenhamLine,
   };
 })();
 
