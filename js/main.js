@@ -445,6 +445,17 @@
 
     $('#btn-reset-view').addEventListener('click', () => MapEditor.resetView());
 
+    $('#btn-toggle-fog').addEventListener('click', () => {
+      const enabled = MapEditor.toggleFog();
+      $('#btn-toggle-fog').classList.toggle('active', enabled);
+      appendLog(enabled ? '🌫 Fog of war enabled.' : '☀️ Fog of war disabled.');
+    });
+
+    $('#btn-reset-fog').addEventListener('click', () => {
+      MapEditor.resetFog();
+      appendLog('🌑 Fog reset – all tiles hidden again.');
+    });
+
     // ── Tile palette ──────────────────────────────────────────────────────────
     const tilePalette = $('#tile-palette');
     [...MapEditor.TILE_KEYS, 'empty'].forEach(key => {

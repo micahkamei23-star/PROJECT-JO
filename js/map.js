@@ -36,6 +36,9 @@ const MapEditor = (() => {
     MapEngine.initMap(mapCols, mapRows);
     _syncCanvasSize();
 
+    // Initialise fog of war system
+    FogSystem.init(MapEngine.width, MapEngine.height, MapEngine.getTile);
+
     // Initialise token system
     TokenSystem.init(
       MapEngine.width, MapEngine.height,
@@ -52,14 +55,28 @@ const MapEditor = (() => {
       onPaint:       _paintCell,
       onFill:        _fillCell,
       onRect:        _rectFill,
+      onLine:        _lineFill,
       onViewChange:  _markDirty,
       onPointerDown: (wx, wy) => TokenSystem.handlePointerDown(wx, wy, TILE_SIZE),
       onPointerMove: (wx, wy) => {
         const hit = TokenSystem.handlePointerMove(wx, wy, TILE_SIZE);
-        if (hit) _markDirty();
+        if (hit) {
+          // Update fog visibility when a token is being dragged
+          if (FogSystem.enabled) {
+            FogSystem.updateVisibility(TokenSystem.getAll());
+          }
+          _markDirty();
+        }
         return hit;
       },
-      onPointerUp: () => { TokenSystem.handlePointerUp(); _markDirty(); },
+      onPointerUp: () => {
+        TokenSystem.handlePointerUp();
+        // Refresh fog after token drop
+        if (FogSystem.enabled) {
+          FogSystem.updateVisibility(TokenSystem.getAll());
+        }
+        _markDirty();
+      },
     });
     UIControls.bindCanvas(_canvas);
 
@@ -137,8 +154,17 @@ const MapEditor = (() => {
       TileRenderer.drawRectPreview(_ctx, rs.row, rs.col, re.row, re.col, TILE_SIZE);
     }
 
+    // Line-tool preview
+    const ls = UIControls.lineStart, le = UIControls.lineEnd;
+    if (ls && le) {
+      TileRenderer.drawLinePreview(_ctx, ls.row, ls.col, le.row, le.col, TILE_SIZE);
+    }
+
     // Tokens
     TokenSystem.drawTokens(_ctx, TILE_SIZE);
+
+    // Fog of war overlay (drawn last so it covers tiles and tokens)
+    FogSystem.drawFog(_ctx, mW, mH, TILE_SIZE);
 
     _ctx.restore();
   }
@@ -171,6 +197,16 @@ const MapEditor = (() => {
     _markDirty();
   }
 
+  /** Paint tiles along a Bresenham line from (r1,c1) to (r2,c2). */
+  function _lineFill(r1, c1, r2, c2) {
+    const cells = TileRenderer.bresenhamLine(r1, c1, r2, c2);
+    const type  = UIControls.activeTool === 'eraser' ? null : _selectedTile;
+    for (const { row, col } of cells) {
+      MapEngine.setTile(row, col, type);
+    }
+    _markDirty();
+  }
+
   // ── Token event callbacks ─────────────────────────────────────────────────────
 
   function _handleTokenSelected(id) {
@@ -193,6 +229,7 @@ const MapEditor = (() => {
     MapEngine.resize(newCols, newRows);
     _syncCanvasSize();
     TokenSystem.setMapSize(MapEngine.width, MapEngine.height);
+    FogSystem.setMapSize(MapEngine.width, MapEngine.height);
     _markDirty();
   }
 
@@ -200,6 +237,7 @@ const MapEditor = (() => {
     return {
       ...MapEngine.serialize(),
       tokens: TokenSystem.serialize(),
+      fog:    FogSystem.serialize(),
     };
   }
 
@@ -221,7 +259,9 @@ const MapEditor = (() => {
 
     _syncCanvasSize();
     TokenSystem.setMapSize(MapEngine.width, MapEngine.height);
+    FogSystem.setMapSize(MapEngine.width, MapEngine.height);
     if (data.tokens) TokenSystem.deserialize(data.tokens);
+    if (data.fog)    FogSystem.deserialize(data.fog);
     _markDirty();
   }
 
@@ -238,17 +278,54 @@ const MapEditor = (() => {
 
   function addToken(characterId, name, avatar, hp, maxHp, gridCol, gridRow) {
     const id = TokenSystem.addToken(characterId, name, avatar, hp, maxHp, gridCol, gridRow);
+    // Update fog visibility whenever a token is placed
+    if (FogSystem.enabled) {
+      FogSystem.updateVisibility(TokenSystem.getAll());
+    }
     _markDirty();
     return id;
   }
 
-  function removeToken(id)             { TokenSystem.removeToken(id);           _markDirty(); }
-  function removeTokenByCharId(cid)    { TokenSystem.removeTokenByCharId(cid);  _markDirty(); }
-  function getTokens()                 { return TokenSystem.getAll(); }
-  function getSelectedToken()          { return TokenSystem.getSelected(); }
+  function removeToken(id) {
+    TokenSystem.removeToken(id);
+    if (FogSystem.enabled) {
+      FogSystem.updateVisibility(TokenSystem.getAll());
+    }
+    _markDirty();
+  }
+
+  function removeTokenByCharId(cid) {
+    TokenSystem.removeTokenByCharId(cid);
+    if (FogSystem.enabled) {
+      FogSystem.updateVisibility(TokenSystem.getAll());
+    }
+    _markDirty();
+  }
+
+  function getTokens()       { return TokenSystem.getAll(); }
+  function getSelectedToken(){ return TokenSystem.getSelected(); }
 
   function triggerTokenAction(tokenId, actionKey) {
     TokenSystem.triggerAction(tokenId, actionKey);
+    _markDirty();
+  }
+
+  /** Toggle fog of war on/off. */
+  function toggleFog() {
+    FogSystem.setEnabled(!FogSystem.enabled);
+    if (FogSystem.enabled) {
+      FogSystem.updateVisibility(TokenSystem.getAll());
+    }
+    _markDirty();
+    return FogSystem.enabled;
+  }
+
+  /** Reset fog (re-hide all explored tiles). */
+  function resetFog() {
+    FogSystem.resetFog();
+    if (FogSystem.enabled) {
+      FogSystem.updateVisibility(TokenSystem.getAll());
+    }
     _markDirty();
   }
 
@@ -318,6 +395,11 @@ const MapEditor = (() => {
     nextTurn,
     endCombat,
 
+    // Fog of war
+    toggleFog,
+    resetFog,
+    get fogEnabled() { return FogSystem.enabled; },
+
     // Callbacks
     onLog,
     onTokenSelect,
@@ -327,6 +409,7 @@ const MapEditor = (() => {
     get tokenSystem()  { return TokenSystem; },
     get combatSystem() { return CombatSystem; },
     get engine()       { return MapEngine; },
+    get fogSystem()    { return FogSystem; },
   };
 })();
 
