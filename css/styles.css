@@ -1439,7 +1439,6 @@ textarea::placeholder {
   background: linear-gradient(90deg, rgba(200,168,75,.1), var(--btn-gradient));
   box-shadow: 0 0 10px var(--accent-gold-glow);
   animation: border-dance 2.5s ease-in-out infinite;
-  will-change: border-color, box-shadow;
 }
 
 .tile-palette {
@@ -1483,7 +1482,6 @@ textarea::placeholder {
   background: linear-gradient(135deg, rgba(200,168,75,.12), var(--btn-gradient));
   box-shadow: 0 0 8px var(--accent-gold-glow);
   animation: border-dance 2s ease-in-out infinite;
-  will-change: border-color, box-shadow;
 }
 
 /* Token List */
@@ -1518,7 +1516,6 @@ textarea::placeholder {
   border-color: var(--accent-gold);
   box-shadow: 0 0 14px var(--accent-gold-glow);
   animation: token-breathe 2s ease-in-out infinite;
-  will-change: transform, box-shadow;
 }
 
 .token-item .token-icon {
@@ -1946,7 +1943,6 @@ hr.separator {
   background: linear-gradient(90deg, rgba(200,168,75,.1), var(--bg-card));
   box-shadow: 0 0 12px var(--accent-gold-glow);
   animation: pulse 2s ease-in-out infinite;
-  will-change: opacity, box-shadow;
 }
 
 .combat-entry .initiative {
@@ -2628,8 +2624,11 @@ a:hover::after {
 /* ─────────────────────────────────────────────────────
    40. THEME TRANSITION
 ───────────────────────────────────────────────────── */
-body,
-body * {
+/* Scope theme transitions to specific interactive elements only */
+.btn, .card, .tab-panel, .char-item, .inv-item,
+.token-item, .tool-btn, .tile-btn, .module-item,
+.badge, input, select, textarea, nav, header,
+.roll-result-box, .dice-btn, .theme-btn {
   transition-property: background-color, border-color, color, box-shadow;
   transition-duration: .3s;
   transition-timing-function: ease;
