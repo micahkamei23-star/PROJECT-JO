@@ -13,7 +13,7 @@
     <span style="font-size:2rem">🐉</span>
     <div>
       <h1>PROJECT JO</h1>
-      <span class="subtitle">Dungeons &amp; Dragons Virtual Tabletop</span>
+      <span class="subtitle">D&amp;D Virtual Tabletop Engine</span>
     </div>
   </header>
 
@@ -24,6 +24,7 @@
     <button data-tab="inventory">🎒 Inventory</button>
     <button data-tab="map">🗺️ Map Editor</button>
     <button data-tab="animation">✨ Animations</button>
+    <button data-tab="engine">⚙️ Engine</button>
   </nav>
 
   <!-- ── Main content ───────────────────────────────────────── -->
@@ -250,6 +251,19 @@
             </div>
           </div>
 
+          <!-- ── Draw Tools ──────────────────────────────── -->
+          <div class="card">
+            <h2>✏️ Draw Tools</h2>
+            <div class="btn-group" style="flex-direction:column;gap:4px;">
+              <button class="btn btn-secondary full-width" id="btn-tool-line">📏 Line Tool</button>
+              <button class="btn btn-secondary full-width" id="btn-tool-circle">⭕ Circle Tool</button>
+            </div>
+            <div class="btn-group mt-8">
+              <button class="btn btn-secondary" id="btn-undo" style="flex:1" data-tooltip="Undo last action">↩ Undo</button>
+              <button class="btn btn-secondary" id="btn-redo" style="flex:1" data-tooltip="Redo last action">↪ Redo</button>
+            </div>
+          </div>
+
           <!-- ── Tiles ───────────────────────────────────── -->
           <div class="card">
             <h2>🖌 Tiles</h2>
@@ -314,6 +328,29 @@
               <button class="btn btn-danger    full-width" id="btn-end-combat">🏳 End Combat</button>
             </div>
             <div id="combat-tracker" class="combat-tracker mt-8"></div>
+          </div>
+
+          <!-- ── Fog of War ─────────────────────────────── -->
+          <div class="card">
+            <h2>🌫️ Fog of War</h2>
+            <div class="btn-group" style="flex-direction:column;gap:4px;">
+              <button class="btn btn-secondary full-width" id="btn-toggle-fog">🌫️ Toggle Fog</button>
+              <button class="btn btn-secondary full-width" id="btn-reveal-all">👁️ Reveal All</button>
+            </div>
+            <div id="fog-status" class="map-info mt-8">Fog: Disabled</div>
+          </div>
+
+          <!-- ── Visual FX ───────────────────────────────── -->
+          <div class="card">
+            <h2>🎆 Visual FX</h2>
+            <div class="btn-group" style="flex-direction:column;gap:4px;">
+              <button class="btn btn-secondary full-width fx-btn" data-fx="fire">🔥 Fire</button>
+              <button class="btn btn-secondary full-width fx-btn" data-fx="magic">✨ Magic</button>
+              <button class="btn btn-secondary full-width fx-btn" data-fx="heal">💚 Heal</button>
+              <button class="btn btn-secondary full-width fx-btn" data-fx="smoke">💨 Smoke</button>
+              <button class="btn btn-secondary full-width fx-btn" data-fx="sparks">⚡ Sparks</button>
+            </div>
+            <p class="text-muted mt-8">Select a token, then click an effect to spawn it at the token's position.</p>
           </div>
 
           <!-- ── Map Controls ────────────────────────────── -->
@@ -417,9 +454,53 @@
       </div>
     </section>
 
+    <!-- ════════════════════════════════════════════════════
+         ENGINE INFO PANEL
+         ════════════════════════════════════════════════════ -->
+    <section id="tab-engine" class="tab-panel">
+      <div class="grid-2" style="align-items:start;">
+        <div class="card">
+          <h2>⚙️ Engine Status</h2>
+          <div class="engine-stats" id="engine-stats">
+            <div class="stat-row"><span class="stat-label">FPS</span><span id="engine-fps" class="stat-val">—</span></div>
+            <div class="stat-row"><span class="stat-label">Entities</span><span id="engine-entities" class="stat-val">—</span></div>
+            <div class="stat-row"><span class="stat-label">Particles</span><span id="engine-particles" class="stat-val">—</span></div>
+            <div class="stat-row"><span class="stat-label">Fog</span><span id="engine-fog" class="stat-val">—</span></div>
+            <div class="stat-row"><span class="stat-label">Map Layers</span><span id="engine-layers" class="stat-val">—</span></div>
+            <div class="stat-row"><span class="stat-label">Undo Stack</span><span id="engine-undo" class="stat-val">—</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>📋 Engine Architecture</h2>
+          <div class="engine-modules" id="engine-modules">
+            <div class="module-item"><span class="module-icon">📡</span><span class="module-name">Event Bus</span><span class="module-status badge badge-green">Active</span></div>
+            <div class="module-item"><span class="module-icon">🎭</span><span class="module-name">Scene Manager</span><span class="module-status badge badge-green">Active</span></div>
+            <div class="module-item"><span class="module-icon">⏱️</span><span class="module-name">Time Manager</span><span class="module-status badge badge-green">Active</span></div>
+            <div class="module-item"><span class="module-icon">📦</span><span class="module-name">Asset Manager</span><span class="module-status badge badge-green">Active</span></div>
+            <div class="module-item"><span class="module-icon">🎆</span><span class="module-name">Particle System</span><span class="module-status badge badge-green">Active</span></div>
+            <div class="module-item"><span class="module-icon">🌫️</span><span class="module-name">Fog of War</span><span class="module-status badge badge-green">Active</span></div>
+            <div class="module-item"><span class="module-icon">⚡</span><span class="module-name">Action System</span><span class="module-status badge badge-green">Active</span></div>
+            <div class="module-item"><span class="module-icon">🖥️</span><span class="module-name">Render Pipeline</span><span class="module-status badge badge-green">Active</span></div>
+            <div class="module-item"><span class="module-icon">🗺️</span><span class="module-name">Map Engine</span><span class="module-status badge badge-green">Active</span></div>
+            <div class="module-item"><span class="module-icon">🎲</span><span class="module-name">Combat System</span><span class="module-status badge badge-green">Active</span></div>
+            <div class="module-item"><span class="module-icon">🧙</span><span class="module-name">Token System</span><span class="module-status badge badge-green">Active</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- ── Scripts ────────────────────────────────────────────── -->
+  <!-- Engine Core -->
+  <script src="js/engine/eventBus.js"></script>
+  <script src="js/engine/sceneManager.js"></script>
+  <script src="js/engine/timeManager.js"></script>
+  <script src="js/engine/assetManager.js"></script>
+  <script src="js/engine/particleSystem.js"></script>
+  <script src="js/engine/fogOfWar.js"></script>
+  <script src="js/engine/actionSystem.js"></script>
+  <script src="js/engine/renderPipeline.js"></script>
   <script src="js/dice.js"></script>
   <script src="js/character.js"></script>
   <script src="js/inventory.js"></script>

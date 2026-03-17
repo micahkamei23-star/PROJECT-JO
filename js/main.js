@@ -692,6 +692,99 @@
       refreshTokenCharSelect();
       refreshTokenList();
     });
+
+    // ── Undo / Redo buttons ──────────────────────────────────────────────────
+    $('#btn-undo').addEventListener('click', () => {
+      if (MapEditor.canUndo()) {
+        MapEditor.undo();
+        appendLog('↩ Undo');
+        refreshTokenList();
+      }
+    });
+
+    $('#btn-redo').addEventListener('click', () => {
+      if (MapEditor.canRedo()) {
+        MapEditor.redo();
+        appendLog('↪ Redo');
+        refreshTokenList();
+      }
+    });
+
+    // ── Line and Circle tool buttons ─────────────────────────────────────────
+    $('#btn-tool-line').addEventListener('click', () => {
+      MapEditor.setTool('brush');
+      $$('#tool-palette .tile-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === 'brush'));
+      appendLog('📏 Line tool: click start and end points');
+    });
+
+    $('#btn-tool-circle').addEventListener('click', () => {
+      MapEditor.setTool('brush');
+      $$('#tool-palette .tile-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === 'brush'));
+      appendLog('⭕ Circle tool: click center then radius');
+    });
+
+    // ── Fog of War buttons ───────────────────────────────────────────────────
+    $('#btn-toggle-fog').addEventListener('click', () => {
+      MapEditor.toggleFog();
+      const enabled = MapEditor.isFogEnabled();
+      $('#fog-status').textContent = enabled ? 'Fog: Enabled' : 'Fog: Disabled';
+      $('#btn-toggle-fog').textContent = enabled ? '🌫️ Disable Fog' : '🌫️ Enable Fog';
+      appendLog(enabled ? '🌫️ Fog of war enabled' : '🌫️ Fog of war disabled');
+    });
+
+    $('#btn-reveal-all').addEventListener('click', () => {
+      if (typeof FogOfWar !== 'undefined') {
+        FogOfWar.revealAll();
+        appendLog('👁️ Map fully revealed');
+      }
+    });
+
+    // ── VFX buttons ──────────────────────────────────────────────────────────
+    $$('.fx-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const fx = btn.dataset.fx;
+        const token = MapEditor.getSelectedToken();
+        if (token) {
+          MapEditor.spawnBurst(fx, token.x, token.y, 15);
+          appendLog(`🎆 ${fx} effect at ${token.name}'s position`);
+        } else {
+          // Spawn at center of visible map
+          const centerCol = Math.floor(MapEditor.cols / 2);
+          const centerRow = Math.floor(MapEditor.rows / 2);
+          MapEditor.spawnBurst(fx, centerCol, centerRow, 15);
+          appendLog(`🎆 ${fx} effect at map center`);
+        }
+      });
+    });
+
+    // ── Engine stats updater ─────────────────────────────────────────────────
+    setInterval(() => {
+      const fpsEl = document.getElementById('engine-fps');
+      const entitiesEl = document.getElementById('engine-entities');
+      const particlesEl = document.getElementById('engine-particles');
+      const fogEl = document.getElementById('engine-fog');
+      const layersEl = document.getElementById('engine-layers');
+      const undoEl = document.getElementById('engine-undo');
+
+      if (fpsEl && typeof TimeManager !== 'undefined') {
+        fpsEl.textContent = Math.round(TimeManager.getFPS());
+      }
+      if (entitiesEl && typeof SceneManager !== 'undefined') {
+        entitiesEl.textContent = SceneManager.count();
+      }
+      if (particlesEl && typeof ParticleSystem !== 'undefined') {
+        particlesEl.textContent = typeof ParticleSystem.particleCount === 'function' ? ParticleSystem.particleCount() : ParticleSystem.particleCount;
+      }
+      if (fogEl) {
+        fogEl.textContent = MapEditor.isFogEnabled ? (MapEditor.isFogEnabled() ? 'Enabled' : 'Disabled') : 'N/A';
+      }
+      if (layersEl) {
+        layersEl.textContent = '5 (ground, walls, decals, props, effects)';
+      }
+      if (undoEl && MapEditor.canUndo) {
+        undoEl.textContent = MapEditor.canUndo() ? 'Available' : 'Empty';
+      }
+    }, 1000);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -774,6 +867,23 @@
     initInventoryPanel();
     initMapPanel();
     initAnimationPanel();
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      // Only handle shortcuts when not typing in input fields
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            if (MapEditor.canRedo && MapEditor.canRedo()) MapEditor.redo();
+          } else {
+            if (MapEditor.canUndo && MapEditor.canUndo()) MapEditor.undo();
+          }
+        }
+      }
+    });
   });
 
 })();
