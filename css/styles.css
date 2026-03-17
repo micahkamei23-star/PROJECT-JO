@@ -1818,12 +1818,12 @@ hr.separator {
   box-shadow: 0 0 12px var(--accent-gold-glow);
 }
 
-.theme-btn[data-theme-target="dark-fantasy"] { background: radial-gradient(circle, #c8a84b 0%, #0d0a05 70%); }
-.theme-btn[data-theme-target="arcane-blue"]   { background: radial-gradient(circle, #4a9eff 0%, #030810 70%); }
-.theme-btn[data-theme-target="infernal-red"]  { background: radial-gradient(circle, #ff4a1a 0%, #100303 70%); }
-.theme-btn[data-theme-target="celestial-gold"]{ background: radial-gradient(circle, #ffd700 0%, #0f0c02 70%); }
-.theme-btn[data-theme-target="stone-steel"]   { background: radial-gradient(circle, #9ab0c8 0%, #0a0a0a 70%); }
-.theme-btn[data-theme-target="parchment-classic"]{ background: radial-gradient(circle, #6a3810 0%, #f2dfc0 70%); }
+.theme-btn[data-theme-id="dark-fantasy"] { background: radial-gradient(circle, #c8a84b 0%, #0d0a05 70%); }
+.theme-btn[data-theme-id="arcane-blue"]   { background: radial-gradient(circle, #4a9eff 0%, #030810 70%); }
+.theme-btn[data-theme-id="infernal-red"]  { background: radial-gradient(circle, #ff4a1a 0%, #100303 70%); }
+.theme-btn[data-theme-id="celestial-gold"]{ background: radial-gradient(circle, #ffd700 0%, #0f0c02 70%); }
+.theme-btn[data-theme-id="stone-steel"]   { background: radial-gradient(circle, #9ab0c8 0%, #0a0a0a 70%); }
+.theme-btn[data-theme-id="parchment-classic"]{ background: radial-gradient(circle, #6a3810 0%, #f2dfc0 70%); }
 
 /* ─────────────────────────────────────────────────────
    19. ATMOSPHERIC CANVAS & FANTASY FRAME
