@@ -2,14 +2,18 @@
  * map.js – Map Editor Coordinator
  *
  * Orchestrates the new sub-modules:
- *   MapEngine    – tile state & data operations
- *   TileRenderer – canvas drawing
- *   TokenSystem  – token management & rendering
- *   CombatSystem – turn order & initiative
- *   UIControls   – mouse / touch / zoom input
+ *   MapEngine       – tile state, layers, regions, undo/redo, drawing tools
+ *   TileRenderer    – canvas drawing
+ *   TokenSystem     – token management, rendering, auras, lerp, vision
+ *   CombatSystem    – turn order, initiative, action economy, conditions
+ *   UIControls      – mouse / touch / zoom input
+ *   FogOfWar        – fog of war & line-of-sight (engine)
+ *   ParticleSystem  – particle effects (engine)
+ *   RenderPipeline  – layered render passes & camera shake (engine)
  *
  * Public API is kept backward-compatible so existing main.js code continues
- * to work, plus new methods for tokens and combat.
+ * to work, plus new methods for tokens, combat, fog, particles, undo/redo,
+ * regions, and drawing tools.
  */
 
 const MapEditor = (() => {
@@ -17,14 +21,23 @@ const MapEditor = (() => {
 
   const TILE_SIZE = 40;   // pixels per grid cell (world space)
 
+  // Module availability checks (graceful degradation)
+  const _hasFog       = typeof FogOfWar !== 'undefined';
+  const _hasParticles = typeof ParticleSystem !== 'undefined';
+  const _hasPipeline  = typeof RenderPipeline !== 'undefined';
+  const _hasEventBus  = typeof EventBus !== 'undefined';
+
   let _canvas  = null;
   let _ctx     = null;
   let _rafId   = null;
   let _dirty   = true;
+  let _lastTs  = 0;       // timestamp of previous frame (ms)
 
   let _selectedTile  = 'floor';
   let _onLog         = null;    // (message: string) => void
   let _onTokenSelect = null;    // (id: number|null) => void
+
+  let _fogEnabled = false;      // fog of war toggle
 
   // ── Initialise ──────────────────────────────────────────────────────────────
 
@@ -46,6 +59,17 @@ const MapEditor = (() => {
     // Initialise combat system (callback wired later by main.js)
     CombatSystem.init(null);
 
+    // Initialise fog of war
+    if (_hasFog) {
+      FogOfWar.init(mapCols, mapRows);
+      _syncFogBlockers();
+    }
+
+    // Initialise render pipeline (loose integration)
+    if (_hasPipeline) {
+      RenderPipeline.clear();
+    }
+
     // Initialise input layer
     UIControls.init({
       tileSize:      TILE_SIZE,
@@ -59,11 +83,62 @@ const MapEditor = (() => {
         if (hit) _markDirty();
         return hit;
       },
-      onPointerUp: () => { TokenSystem.handlePointerUp(); _markDirty(); },
+      onPointerUp: () => {
+        TokenSystem.handlePointerUp();
+        _updateAllVisionSources();
+        _markDirty();
+      },
     });
     UIControls.bindCanvas(_canvas);
 
+    _lastTs = 0;
     _startLoop();
+  }
+
+  // ── Fog helpers ─────────────────────────────────────────────────────────────
+
+  function _syncFogBlockers() {
+    if (!_hasFog) return;
+    const { tiles, width: mW, height: mH } = MapEngine.mapState;
+    for (let r = 0; r < mH; r++) {
+      for (let c = 0; c < mW; c++) {
+        const tile = tiles[r][c];
+        const blocks = tile && (tile.type === 'wall' || tile.type === 'stone');
+        FogOfWar.setBlocker(r, c, !!blocks);
+      }
+    }
+  }
+
+  function _updateAllVisionSources() {
+    if (!_hasFog || !_fogEnabled) return;
+    const tokens = TokenSystem.getAll();
+    tokens.forEach(function (tok) {
+      FogOfWar.setVisionSource(
+        tok.id,
+        tok.x, tok.y,
+        tok.visionRadius || 6,
+        tok.darkvision || 0
+      );
+    });
+    FogOfWar.recalculate();
+  }
+
+  function _updateTokenVision(token) {
+    if (!_hasFog || !_fogEnabled || !token) return;
+    FogOfWar.setVisionSource(
+      token.id,
+      token.x, token.y,
+      token.visionRadius || 6,
+      token.darkvision || 0
+    );
+    FogOfWar.recalculate();
+  }
+
+  function _reinitFog() {
+    if (!_hasFog) return;
+    FogOfWar.init(MapEngine.width, MapEngine.height);
+    _syncFogBlockers();
+    if (_fogEnabled) _updateAllVisionSources();
   }
 
   // ── Render loop ─────────────────────────────────────────────────────────────
@@ -71,14 +146,43 @@ const MapEditor = (() => {
   function _startLoop() {
     if (_rafId) cancelAnimationFrame(_rafId);
     function loop(ts) {
+      let dt = _lastTs ? (ts - _lastTs) / 1000 : 0;
+      if (dt > 0.1) dt = 0.1; // clamp to avoid spiral
+      _lastTs = ts;
+
       TileRenderer.updateAnimation(ts);
-      if (_dirty || _hasAnimatedTiles()) {
+
+      // Update token lerp interpolation
+      if (typeof TokenSystem.updateLerp === 'function') {
+        TokenSystem.updateLerp(dt);
+      }
+
+      // Update particle system
+      if (_hasParticles) {
+        ParticleSystem.update(dt);
+      }
+
+      const needsRender = _dirty
+        || _hasAnimatedTiles()
+        || (_hasParticles && ParticleSystem.particleCount() > 0)
+        || _isLerping();
+
+      if (needsRender) {
         render();
         _dirty = false;
       }
+
       _rafId = requestAnimationFrame(loop);
     }
     _rafId = requestAnimationFrame(loop);
+  }
+
+  function _isLerping() {
+    const tokens = TokenSystem.getAll();
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].lerpPosition && tokens[i].lerpPosition.t < 1) return true;
+    }
+    return false;
   }
 
   function _hasAnimatedTiles() {
@@ -92,7 +196,10 @@ const MapEditor = (() => {
     return false;
   }
 
-  function _markDirty() { _dirty = true; }
+  function _markDirty() {
+    _dirty = true;
+    if (_hasPipeline) RenderPipeline.markAllDirty();
+  }
 
   // ── Rendering ────────────────────────────────────────────────────────────────
 
@@ -103,14 +210,22 @@ const MapEditor = (() => {
     _ctx.save();
     _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
 
+    // Camera shake offset
+    let shakeX = 0, shakeY = 0;
+    if (_hasPipeline && typeof RenderPipeline.getStats === 'function') {
+      const stats = RenderPipeline.getStats();
+      if (stats && stats.shakeX) shakeX = stats.shakeX;
+      if (stats && stats.shakeY) shakeY = stats.shakeY;
+    }
+
     // Viewport transform
-    _ctx.translate(UIControls.offsetX, UIControls.offsetY);
+    _ctx.translate(UIControls.offsetX + shakeX, UIControls.offsetY + shakeY);
     _ctx.scale(UIControls.scale, UIControls.scale);
 
-    // Dark dungeon background
+    // Pass: background
     TileRenderer.drawBackground(_ctx, mW * TILE_SIZE, mH * TILE_SIZE);
 
-    // Tiles
+    // Pass: tiles
     for (let r = 0; r < mH; r++) {
       for (let c = 0; c < mW; c++) {
         const tile = tiles[r][c];
@@ -120,25 +235,34 @@ const MapEditor = (() => {
       }
     }
 
-    // Grid overlay
+    // Pass: grid overlay
     if (UIControls.showGrid) {
       TileRenderer.drawGrid(_ctx, mW, mH, TILE_SIZE);
     }
 
-    // Hover highlight
+    // Pass: tokens
+    TokenSystem.drawTokens(_ctx, TILE_SIZE);
+
+    // Pass: particles (after tokens, before fog)
+    if (_hasParticles) {
+      ParticleSystem.draw(_ctx);
+    }
+
+    // Pass: fog of war (after particles, before UI)
+    if (_hasFog && _fogEnabled) {
+      FogOfWar.draw(_ctx, TILE_SIZE, mW, mH);
+    }
+
+    // Pass: UI overlays
     const hov = UIControls.hoveredCell;
     if (hov && hov.row >= 0 && hov.row < mH && hov.col >= 0 && hov.col < mW) {
       TileRenderer.drawHover(_ctx, hov.row, hov.col, TILE_SIZE);
     }
 
-    // Rect-tool preview
     const rs = UIControls.rectStart, re = UIControls.rectEnd;
     if (rs && re) {
       TileRenderer.drawRectPreview(_ctx, rs.row, rs.col, re.row, re.col, TILE_SIZE);
     }
-
-    // Tokens
-    TokenSystem.drawTokens(_ctx, TILE_SIZE);
 
     _ctx.restore();
   }
@@ -158,16 +282,19 @@ const MapEditor = (() => {
     } else {
       MapEngine.setTile(row, col, _selectedTile);
     }
+    _syncFogBlockers();
     _markDirty();
   }
 
   function _fillCell(row, col) {
     MapEngine.floodFill(row, col, _selectedTile);
+    _syncFogBlockers();
     _markDirty();
   }
 
   function _rectFill(r1, c1, r2, c2) {
     MapEngine.fillRect(r1, c1, r2, c2, _selectedTile);
+    _syncFogBlockers();
     _markDirty();
   }
 
@@ -180,12 +307,133 @@ const MapEditor = (() => {
 
   function _handleTokenAction(tokenId, actionKey, message) {
     if (_onLog) _onLog(message);
+
+    // Spawn particle effects for token actions
+    if (_hasParticles) {
+      const token = TokenSystem.getToken(tokenId);
+      if (token) {
+        const px = (token.x + 0.5) * TILE_SIZE;
+        const py = (token.y + 0.5) * TILE_SIZE;
+        if (actionKey === 'attack') {
+          ParticleSystem.spawnBurst('hit', px, py, 12);
+        } else if (actionKey === 'spell') {
+          ParticleSystem.spawnBurst('magic', px, py, 16);
+        } else if (actionKey === 'heal') {
+          ParticleSystem.spawnBurst('heal', px, py, 14);
+        }
+        _markDirty();
+      }
+    }
+  }
+
+  // ── Particle helpers ──────────────────────────────────────────────────────────
+
+  function spawnEffect(preset, gridCol, gridRow) {
+    if (!_hasParticles) return null;
+    const px = (gridCol + 0.5) * TILE_SIZE;
+    const py = (gridRow + 0.5) * TILE_SIZE;
+    _markDirty();
+    return ParticleSystem.spawnEffect(preset, px, py);
+  }
+
+  function spawnBurst(preset, gridCol, gridRow, count) {
+    if (!_hasParticles) return;
+    const px = (gridCol + 0.5) * TILE_SIZE;
+    const py = (gridRow + 0.5) * TILE_SIZE;
+    ParticleSystem.spawnBurst(preset, px, py, count);
+    _markDirty();
+  }
+
+  // ── Fog public methods ────────────────────────────────────────────────────────
+
+  function toggleFog() {
+    _fogEnabled = !_fogEnabled;
+    if (_hasFog) {
+      FogOfWar.enabled = _fogEnabled;
+      if (_fogEnabled) _updateAllVisionSources();
+    }
+    _markDirty();
+    return _fogEnabled;
+  }
+
+  function isFogEnabled() {
+    return _fogEnabled;
+  }
+
+  function setFogEnabled(val) {
+    _fogEnabled = !!val;
+    if (_hasFog) {
+      FogOfWar.enabled = _fogEnabled;
+      if (_fogEnabled) _updateAllVisionSources();
+    }
+    _markDirty();
+  }
+
+  // ── Undo / Redo ───────────────────────────────────────────────────────────────
+
+  function undo() {
+    if (typeof MapEngine.undo === 'function') {
+      MapEngine.undo();
+      _syncFogBlockers();
+      _markDirty();
+    }
+  }
+
+  function redo() {
+    if (typeof MapEngine.redo === 'function') {
+      MapEngine.redo();
+      _syncFogBlockers();
+      _markDirty();
+    }
+  }
+
+  function canUndo() {
+    return typeof MapEngine.canUndo === 'function' ? MapEngine.canUndo() : false;
+  }
+
+  function canRedo() {
+    return typeof MapEngine.canRedo === 'function' ? MapEngine.canRedo() : false;
+  }
+
+  // ── Regions ───────────────────────────────────────────────────────────────────
+
+  function addRegion(name, cells, meta) {
+    if (typeof MapEngine.addRegion === 'function') {
+      MapEngine.addRegion(name, cells, meta);
+      _markDirty();
+    }
+  }
+
+  function removeRegion(name) {
+    if (typeof MapEngine.removeRegion === 'function') {
+      MapEngine.removeRegion(name);
+      _markDirty();
+    }
+  }
+
+  // ── Drawing tools ─────────────────────────────────────────────────────────────
+
+  function drawLine(r1, c1, r2, c2) {
+    if (typeof MapEngine.drawLine === 'function') {
+      MapEngine.drawLine(r1, c1, r2, c2, _selectedTile);
+      _syncFogBlockers();
+      _markDirty();
+    }
+  }
+
+  function drawCircle(cr, cc, radius) {
+    if (typeof MapEngine.drawCircle === 'function') {
+      MapEngine.drawCircle(cr, cc, radius, _selectedTile);
+      _syncFogBlockers();
+      _markDirty();
+    }
   }
 
   // ── Public API – core (backward-compatible) ───────────────────────────────────
 
   function fill(tileKey) {
     MapEngine.fillMap(tileKey);
+    _syncFogBlockers();
     _markDirty();
   }
 
@@ -193,6 +441,7 @@ const MapEditor = (() => {
     MapEngine.resize(newCols, newRows);
     _syncCanvasSize();
     TokenSystem.setMapSize(MapEngine.width, MapEngine.height);
+    _reinitFog();
     _markDirty();
   }
 
@@ -222,6 +471,7 @@ const MapEditor = (() => {
     _syncCanvasSize();
     TokenSystem.setMapSize(MapEngine.width, MapEngine.height);
     if (data.tokens) TokenSystem.deserialize(data.tokens);
+    _reinitFog();
     _markDirty();
   }
 
@@ -230,20 +480,40 @@ const MapEditor = (() => {
     return _canvas.toDataURL('image/png');
   }
 
-  // ── Public API – new features ─────────────────────────────────────────────────
+  // ── Public API – tools & view ─────────────────────────────────────────────────
 
   function setTool(tool) { UIControls.activeTool = tool; }
   function toggleGrid()  { UIControls.showGrid = !UIControls.showGrid; }
   function resetView()   { UIControls.resetView(); }
 
+  // ── Public API – tokens ───────────────────────────────────────────────────────
+
   function addToken(characterId, name, avatar, hp, maxHp, gridCol, gridRow) {
     const id = TokenSystem.addToken(characterId, name, avatar, hp, maxHp, gridCol, gridRow);
+    const token = TokenSystem.getToken(id);
+    _updateTokenVision(token);
     _markDirty();
     return id;
   }
 
-  function removeToken(id)             { TokenSystem.removeToken(id);           _markDirty(); }
-  function removeTokenByCharId(cid)    { TokenSystem.removeTokenByCharId(cid);  _markDirty(); }
+  function removeToken(id) {
+    TokenSystem.removeToken(id);
+    if (_hasFog) FogOfWar.removeVisionSource(id);
+    _markDirty();
+  }
+
+  function removeTokenByCharId(cid) {
+    // Find the token id before removal for fog cleanup
+    const tokens = TokenSystem.getAll();
+    let target = null;
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].characterId === cid) { target = tokens[i]; break; }
+    }
+    TokenSystem.removeTokenByCharId(cid);
+    if (_hasFog && target) FogOfWar.removeVisionSource(target.id);
+    _markDirty();
+  }
+
   function getTokens()                 { return TokenSystem.getAll(); }
   function getSelectedToken()          { return TokenSystem.getSelected(); }
 
@@ -251,6 +521,8 @@ const MapEditor = (() => {
     TokenSystem.triggerAction(tokenId, actionKey);
     _markDirty();
   }
+
+  // ── Public API – combat ───────────────────────────────────────────────────────
 
   function startCombat() {
     const order = CombatSystem.rollInitiativeForTokens(TokenSystem.getAll());
@@ -322,6 +594,29 @@ const MapEditor = (() => {
     onLog,
     onTokenSelect,
     setCombatCallback,
+
+    // Fog of war
+    toggleFog,
+    isFogEnabled,
+    setFogEnabled,
+
+    // Particle effects
+    spawnEffect,
+    spawnBurst,
+
+    // Undo / Redo
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+
+    // Regions
+    addRegion,
+    removeRegion,
+
+    // Drawing tools
+    drawLine,
+    drawCircle,
 
     // Sub-system access (for advanced use)
     get tokenSystem()  { return TokenSystem; },
