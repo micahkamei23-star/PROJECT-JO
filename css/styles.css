@@ -526,6 +526,12 @@ main {
   animation: fade-in .35s ease;
 }
 
+#tab-map.tab-panel.active {
+  padding: 0;
+}
+
+#tab-map .map-sidebar .card > * { position: relative; }
+
 .tab-panel {
   display: none;
   animation: slide-in-up .3s cubic-bezier(.4,0,.2,1);
@@ -1349,30 +1355,80 @@ textarea::placeholder {
 }
 
 /* ─────────────────────────────────────────────────────
-   14. MAP EDITOR
+   14. MAP EDITOR  (map-centric 3-column layout)
 ───────────────────────────────────────────────────── */
+
+/* ── Outer 3-column grid ────────────────────────── */
 #map-editor-container {
   display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 12px;
+  grid-template-columns: 180px 1fr 210px;
+  grid-template-rows: 1fr;
+  gap: 10px;
   align-items: start;
+  height: calc(100vh - 130px);
+  min-height: 600px;
+}
+
+@media (max-width: 1100px) {
+  #map-editor-container {
+    grid-template-columns: 160px 1fr 190px;
+  }
 }
 
 @media (max-width: 860px) {
-  #map-editor-container { grid-template-columns: 1fr; }
+  #map-editor-container {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  #map-sidebar-left, #map-sidebar-right {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }
 
+/* ── Shared sidebar styles ──────────────────────── */
+.map-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  top: 70px;
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+.map-sidebar .card {
+  padding: 12px 14px;
+}
+
+.map-sidebar .card h2 {
+  font-size: .82rem;
+  margin-bottom: 8px;
+}
+
+/* ── Center column (canvas + bottom bar) ────────── */
+#map-center {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+}
+
+/* ── Canvas wrapper ─────────────────────────────── */
 #map-canvas-wrapper {
   background: var(--obsidian-gradient);
   border: 2px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: auto;
   position: relative;
-  box-shadow: var(--shadow-deep),
-              inset 0 0 60px rgba(0,0,0,.5);
+  flex: 1 1 0;
   min-height: 300px;
   cursor: crosshair;
   transition: border-color .3s ease;
+  box-shadow: var(--shadow-deep), inset 0 0 60px rgba(0,0,0,.5);
 }
 
 #map-canvas-wrapper:hover {
@@ -1383,14 +1439,88 @@ textarea::placeholder {
   display: block;
 }
 
-#map-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* ── Bottom bar ─────────────────────────────────── */
+#map-bottom-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.tool-palette,
-.tile-palette {
+#map-bottom-combat,
+#map-bottom-log {
+  padding: 10px 12px;
+  overflow: hidden;
+}
+
+.map-bottom-bar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Combat tracker in the bottom bar (horizontal scroll) */
+.combat-tracker-bar {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-height: 80px;
+  padding-bottom: 2px;
+}
+
+.combat-tracker-bar .combat-round {
+  display: none;
+}
+
+.combat-tracker-bar ul.combat-turn-list {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.combat-tracker-bar .combat-turn-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: .72rem;
+  white-space: nowrap;
+  min-width: 56px;
+  text-align: center;
+  transition: var(--transition-fast);
+}
+
+.combat-tracker-bar .combat-turn-item.active-turn {
+  border-color: var(--accent-gold);
+  background: linear-gradient(180deg, rgba(200,168,75,.15), var(--bg-card-alt));
+  box-shadow: 0 0 8px var(--accent-gold-glow);
+}
+
+.combat-tracker-bar .combat-avatar { font-size: 1.2rem; line-height: 1; }
+.combat-tracker-bar .combat-name   { color: var(--text-light); font-size: .68rem; }
+.combat-tracker-bar .combat-init   { color: var(--accent-gold); font-size: .68rem; }
+
+/* Action log in bottom bar */
+#map-bottom-log .anim-log {
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+/* ── Tool / tile palettes ────────────────────────── */
   background: var(--card-gradient);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);

@@ -766,7 +766,10 @@
       const layersEl = document.getElementById('engine-layers');
       const undoEl = document.getElementById('engine-undo');
 
-      if (fpsEl && typeof TimeManager !== 'undefined') {
+      if (fpsEl && typeof PerformanceManager !== 'undefined') {
+        const perfStats = PerformanceManager.getStats();
+        fpsEl.textContent = `${perfStats.fps} (Q${perfStats.quality})`;
+      } else if (fpsEl && typeof TimeManager !== 'undefined') {
         fpsEl.textContent = Math.round(TimeManager.getFPS());
       }
       if (entitiesEl && typeof SceneManager !== 'undefined') {
@@ -899,6 +902,10 @@
         atmCtx.clearRect(0, 0, atmCanvas.width, atmCanvas.height);
         AtmosphericEffects.update(dt);
         AtmosphericEffects.render(atmCtx, atmCanvas.width, atmCanvas.height);
+        // Track performance every frame
+        if (typeof PerformanceManager !== 'undefined') {
+          PerformanceManager.update(dt);
+        }
         requestAnimationFrame(atmLoop);
       }
       requestAnimationFrame(atmLoop);
@@ -925,6 +932,16 @@
     initInventoryPanel();
     initMapPanel();
     initAnimationPanel();
+
+    // Init FeedbackSystem (visual response to interactions)
+    if (typeof FeedbackSystem !== 'undefined') {
+      FeedbackSystem.init({ tileSize: 40 });
+    }
+
+    // Init PerformanceManager (adaptive quality)
+    if (typeof PerformanceManager !== 'undefined') {
+      PerformanceManager.init();
+    }
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
