@@ -760,3 +760,270 @@ button.btn-sm { padding: 4px 10px; font-size: 0.78rem; }
 #tab-map .anim-log {
   max-height: 150px;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   ENGINE UI ENHANCEMENTS
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Glassmorphism card variant ──────────────────────────── */
+.card {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: border-color .2s, box-shadow .2s;
+}
+
+.card:hover {
+  border-color: rgba(200,168,75,0.25);
+  box-shadow: 0 4px 20px rgba(0,0,0,.5), inset 0 1px 0 rgba(200,168,75,0.05);
+}
+
+/* ── Button micro-animations ─────────────────────────────── */
+button.btn {
+  position: relative;
+  overflow: hidden;
+}
+
+button.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%), rgba(255,255,255,0.15) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity .3s;
+  pointer-events: none;
+}
+
+button.btn:active::after {
+  opacity: 1;
+}
+
+/* ── Tab transitions ─────────────────────────────────────── */
+.tab-panel.active {
+  animation: fadeSlideIn .3s ease-out;
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Engine status panel ─────────────────────────────────── */
+.engine-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+
+.stat-label {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: .5px;
+}
+
+.stat-val {
+  color: var(--accent-gold);
+  font-weight: 700;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Engine modules list ─────────────────────────────────── */
+.engine-modules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.module-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  transition: border-color .15s;
+}
+
+.module-item:hover {
+  border-color: var(--accent-gold);
+}
+
+.module-icon {
+  font-size: 1.2rem;
+}
+
+.module-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.module-status {
+  font-size: 0.7rem;
+}
+
+/* ── Fog status indicator ────────────────────────────────── */
+#fog-status {
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+/* ── FX buttons glow ─────────────────────────────────────── */
+.fx-btn:hover {
+  box-shadow: 0 0 12px rgba(200,168,75,0.25);
+}
+
+/* ── Enhanced nav styling ────────────────────────────────── */
+nav button {
+  position: relative;
+}
+
+nav button::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 3px;
+  background: var(--accent-gold);
+  transition: width .2s, left .2s;
+  border-radius: 2px 2px 0 0;
+}
+
+nav button:hover::before {
+  width: 60%;
+  left: 20%;
+}
+
+nav button.active::before {
+  width: 100%;
+  left: 0%;
+}
+
+/* ── Selection ring glow animation ───────────────────────── */
+@keyframes selectionPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(200,168,75,0.3); }
+  50%      { box-shadow: 0 0 16px rgba(200,168,75,0.6); }
+}
+
+/* ── Token faction colors ────────────────────────────────── */
+.token-faction-ally    { border-color: #2d6a2d !important; }
+.token-faction-enemy   { border-color: #8b1a1a !important; }
+.token-faction-neutral { border-color: #c8a84b !important; }
+
+/* ── Header glow effect ──────────────────────────────────── */
+header {
+  background: linear-gradient(180deg, var(--bg-panel) 0%, rgba(37,27,14,0.95) 100%);
+}
+
+header h1 {
+  text-shadow: 0 0 20px rgba(200,168,75,0.3);
+}
+
+/* ── Scrollbar refinement ────────────────────────────────── */
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+}
+
+/* ── Map canvas glow border ──────────────────────────────── */
+#map-canvas-wrapper {
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.5);
+}
+
+/* ── Action log rich entries ─────────────────────────────── */
+.anim-log li {
+  transition: background .15s;
+}
+
+.anim-log li:hover {
+  background: rgba(200,168,75,0.05);
+}
+
+/* ── Mobile enhancements ─────────────────────────────────── */
+@media (max-width: 768px) {
+  nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  nav button {
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    min-width: max-content;
+  }
+
+  main {
+    padding: 12px;
+  }
+
+  .card {
+    padding: 14px;
+  }
+
+  #map-canvas-wrapper {
+    max-height: 50vh;
+    touch-action: none;
+  }
+
+  button.btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .die-btn {
+    min-width: 58px;
+    min-height: 58px;
+  }
+
+  .tile-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .tool-palette .tile-btn {
+    min-width: 48px;
+    min-height: 48px;
+  }
+}
+
+/* ── Smooth focus styles ─────────────────────────────────── */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent-gold);
+  outline-offset: 2px;
+}
+
+/* ── Loading shimmer ─────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.loading {
+  background: linear-gradient(90deg, var(--bg-dark) 25%, var(--bg-card) 50%, var(--bg-dark) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
