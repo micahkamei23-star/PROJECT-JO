@@ -773,7 +773,7 @@
         entitiesEl.textContent = SceneManager.count();
       }
       if (particlesEl && typeof ParticleSystem !== 'undefined') {
-        particlesEl.textContent = ParticleSystem.particleCount;
+        particlesEl.textContent = typeof ParticleSystem.particleCount === 'function' ? ParticleSystem.particleCount() : ParticleSystem.particleCount;
       }
       if (fogEl) {
         fogEl.textContent = MapEditor.isFogEnabled ? (MapEditor.isFogEnabled() ? 'Enabled' : 'Disabled') : 'N/A';
