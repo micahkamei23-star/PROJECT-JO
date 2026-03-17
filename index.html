@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark-fantasy">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,12 +8,25 @@
 </head>
 <body>
 
+  <!-- ── Atmospheric overlay canvas (rendered behind everything) ── -->
+  <canvas id="atmospheric-canvas" class="atmospheric-canvas" aria-hidden="true"></canvas>
+
   <!-- ── Header ─────────────────────────────────────────────── -->
   <header>
-    <span style="font-size:2rem">🐉</span>
-    <div>
+    <span class="header-dragon" style="font-size:2rem">🐉</span>
+    <div class="header-title-group">
       <h1>PROJECT JO</h1>
       <span class="subtitle">D&amp;D Virtual Tabletop Engine</span>
+    </div>
+    <!-- Theme Switcher -->
+    <div class="theme-switcher" id="theme-switcher" role="group" aria-label="Visual Theme">
+      <span class="theme-switcher-label">Theme</span>
+      <button class="theme-btn active" data-theme-id="dark-fantasy"    title="Dark Fantasy"      aria-pressed="true">🌑</button>
+      <button class="theme-btn"        data-theme-id="arcane-blue"     title="Arcane Blue"       aria-pressed="false">🔵</button>
+      <button class="theme-btn"        data-theme-id="infernal-red"    title="Infernal Red"      aria-pressed="false">🔴</button>
+      <button class="theme-btn"        data-theme-id="celestial-gold"  title="Celestial Gold"    aria-pressed="false">⭐</button>
+      <button class="theme-btn"        data-theme-id="stone-steel"     title="Stone &amp; Steel" aria-pressed="false">⚙️</button>
+      <button class="theme-btn"        data-theme-id="parchment-classic" title="Parchment Classic" aria-pressed="false">📜</button>
     </div>
   </header>
 
@@ -509,6 +522,13 @@
   <script src="js/tileRenderer.js"></script>
   <script src="js/tokenSystem.js"></script>
   <script src="js/combatSystem.js"></script>
+  <!-- Phase 2: Visual Systems -->
+  <script src="js/svgIcons.js"></script>
+  <script src="js/themeEngine.js"></script>
+  <script src="js/lightingSystem.js"></script>
+  <script src="js/atmosphericEffects.js"></script>
+  <script src="js/audioHooks.js"></script>
+  <!-- UI & App -->
   <script src="js/uiControls.js"></script>
   <script src="js/map.js"></script>
   <script src="js/animation.js"></script>

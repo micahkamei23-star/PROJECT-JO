@@ -861,6 +861,64 @@
   //  Bootstrap
   // ══════════════════════════════════════════════════════════════════════════
   document.addEventListener('DOMContentLoaded', () => {
+    // Phase 2: Theme engine + atmospheric effects
+    if (typeof ThemeEngine !== 'undefined') {
+      ThemeEngine.init();
+      ThemeEngine.onThemeChange(() => {
+        if (typeof AudioHooks !== 'undefined') AudioHooks.play('ui', 'tab_switch');
+      });
+    }
+
+    // Wire up theme switcher buttons
+    document.querySelectorAll('.theme-btn[data-theme-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const themeId = btn.getAttribute('data-theme-id');
+        if (typeof ThemeEngine !== 'undefined') {
+          ThemeEngine.applyTheme(themeId);
+        } else {
+          document.documentElement.setAttribute('data-theme', themeId);
+        }
+        document.querySelectorAll('.theme-btn').forEach(b => {
+          b.classList.toggle('active', b === btn);
+          b.setAttribute('aria-pressed', String(b === btn));
+        });
+      });
+    });
+
+    // Phase 2: Atmospheric effects canvas
+    const atmCanvas = document.getElementById('atmospheric-canvas');
+    if (atmCanvas && typeof AtmosphericEffects !== 'undefined') {
+      atmCanvas.width  = window.innerWidth;
+      atmCanvas.height = window.innerHeight;
+      AtmosphericEffects.init(atmCanvas.width, atmCanvas.height);
+      const atmCtx = atmCanvas.getContext('2d');
+      let lastAtmTs = 0;
+      function atmLoop(ts) {
+        const dt = lastAtmTs ? (ts - lastAtmTs) / 1000 : 0.016;
+        lastAtmTs = ts;
+        atmCtx.clearRect(0, 0, atmCanvas.width, atmCanvas.height);
+        AtmosphericEffects.update(dt);
+        AtmosphericEffects.render(atmCtx, atmCanvas.width, atmCanvas.height);
+        requestAnimationFrame(atmLoop);
+      }
+      requestAnimationFrame(atmLoop);
+      window.addEventListener('resize', () => {
+        atmCanvas.width  = window.innerWidth;
+        atmCanvas.height = window.innerHeight;
+        AtmosphericEffects.init(atmCanvas.width, atmCanvas.height);
+      });
+    }
+
+    // Phase 2: Inject SVG icon CSS custom properties
+    if (typeof SVGIcons !== 'undefined' && SVGIcons.injectIconFont) {
+      SVGIcons.injectIconFont();
+    }
+
+    // Phase 2: Audio hooks init
+    if (typeof AudioHooks !== 'undefined' && typeof EventBus !== 'undefined') {
+      AudioHooks.onEvent(EventBus);
+    }
+
     initTabs();
     initDicePanel();
     initCharacterPanel();
