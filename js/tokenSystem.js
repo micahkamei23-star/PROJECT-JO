@@ -56,8 +56,8 @@ const TokenSystem = (() => {
   let _onSelect   = null;
   let _onAction   = null;
 
-  function _tokensRef() { return _GS._getTokensRef(); }
-  function _selectedId() { return _GS._getSelectionRef().selectedTokenId; }
+  /** Read selected token ID from GameState (safe — primitive value). */
+  function _selectedId() { return _GS.getSelection().selectedTokenId; }
 
   // ── Visual animation state ─────────────────────────────────────────────────
 
@@ -124,9 +124,9 @@ const TokenSystem = (() => {
 
   function addToken(characterId, name, avatar, hp, maxHp, gridCol, gridRow) {
     // Remove existing token with same characterId
-    const tokens = _tokensRef();
-    for (const tid of Object.keys(tokens)) {
-      if (tokens[tid].characterId === characterId) {
+    const allTokens = _GS.getAllTokens();
+    for (const tid of Object.keys(allTokens)) {
+      if (allTokens[tid].characterId === characterId) {
         const numId = Number(tid);
         _GS.applyAction({ type: 'token.remove', payload: { id: numId } });
         _breathPhases.delete(numId);
@@ -176,17 +176,17 @@ const TokenSystem = (() => {
   }
 
   function removeTokenByCharId(characterId) {
-    const tokens = _tokensRef();
-    for (const tid of Object.keys(tokens)) {
-      if (tokens[tid].characterId === characterId) {
+    const allTokens = _GS.getAllTokens();
+    for (const tid of Object.keys(allTokens)) {
+      if (allTokens[tid].characterId === characterId) {
         removeToken(Number(tid));
         return;
       }
     }
   }
 
-  function getToken(id)  { return _tokensRef()[id] || null; }
-  function getAll()      { return Object.values(_tokensRef()); }
+  function getToken(id)  { return _GS.getToken(id); }
+  function getAll()      { return _GS.getTokensArray(); }
   function getSelected() {
     const selId = _selectedId();
     return selId ? getToken(selId) : null;
@@ -237,7 +237,7 @@ const TokenSystem = (() => {
   function handlePointerDown(worldX, worldY, tileSize) {
     const col = Math.floor(worldX / tileSize);
     const row = Math.floor(worldY / tileSize);
-    const tokens = Object.values(_tokensRef());
+    const tokens = _GS.getTokensArray();
     for (let i = tokens.length - 1; i >= 0; i--) {
       const t = tokens[i];
       if (t.x === col && t.y === row) {
@@ -280,7 +280,7 @@ const TokenSystem = (() => {
     const col = Math.floor(worldX / tileSize);
     const row = Math.floor(worldY / tileSize);
     _hoveredId = null;
-    const tokens = Object.values(_tokensRef());
+    const tokens = _GS.getTokensArray();
     for (let i = tokens.length - 1; i >= 0; i--) {
       const t = tokens[i];
       if (t.x === col && t.y === row) {
@@ -571,7 +571,7 @@ const TokenSystem = (() => {
   // ── Main draw pass ────────────────────────────────────────────────────────
 
   function drawTokens(ctx, tileSize) {
-    const tokens = Object.values(_tokensRef());
+    const tokens = _GS.getTokensArray();
     for (const token of tokens) {
       const lp   = token.lerpPosition;
       const useL = lp && typeof lp.t === 'number' && lp.t < 1;
@@ -705,13 +705,18 @@ const TokenSystem = (() => {
   // ── Smooth movement (lerp) ────────────────────────────────────────────────
 
   function updateLerp(dt) {
-    const tokens = Object.values(_tokensRef());
+    const tokens = _GS.getTokensArray();
     for (const token of tokens) {
       const lp = token.lerpPosition;
       if (!lp || lp.t >= 1) continue;
       const dur = lp.duration || 0.3;
-      lp.t = Math.min(1, lp.t + dt / dur);
-      if (lp.t >= 1) {
+      const newT = Math.min(1, lp.t + dt / dur);
+      // Update lerpPosition through GameState
+      _GS.applyAction({ type: 'token.update', payload: {
+        id: token.id,
+        lerpPosition: { ...lp, t: newT },
+      }});
+      if (newT >= 1) {
         const newX = Math.round(lp.toX / (lp._tileSize || 1));
         const newY = Math.round(lp.toY / (lp._tileSize || 1));
         _GS.applyAction({ type: 'token.setPosition', payload: { id: token.id, x: newX, y: newY } });
@@ -785,7 +790,7 @@ const TokenSystem = (() => {
   // ── Serialisation ─────────────────────────────────────────────────────────
 
   function serialize() {
-    return Object.values(_tokensRef()).map(t => ({
+    return _GS.getTokensArray().map(t => ({
       ...t,
       statusEffects: [...(t.statusEffects || [])],
       conditions:    [...(t.conditions    || [])],
@@ -823,7 +828,7 @@ const TokenSystem = (() => {
   // ── Public API ────────────────────────────────────────────────────────────
 
   return {
-    get tokens()     { return Object.values(_tokensRef()); },
+    get tokens()     { return _GS.getTokensArray(); },
     get selectedId() { return _selectedId(); },
 
     init,
