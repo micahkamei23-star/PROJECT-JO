@@ -179,7 +179,7 @@ const TokenSystem = (() => {
     const tokens = _tokensRef();
     for (const tid of Object.keys(tokens)) {
       if (tokens[tid].characterId === characterId) {
-        removeToken(Number(tid) || tid);
+        removeToken(Number(tid));
         return;
       }
     }
