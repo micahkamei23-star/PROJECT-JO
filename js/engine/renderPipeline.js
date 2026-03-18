@@ -148,8 +148,6 @@ const RenderPipeline = (() => {
         _fpsTimer -= 1.0;
       }
     }
-    _lastFrameTs = now;
-
     // Update shake (duration is in seconds, timestamps are ms)
     if (_shakeDuration > 0) {
       const dt = _lastFrameTs > 0 ? (now - _lastFrameTs) / 1000 : 0;
@@ -165,6 +163,7 @@ const RenderPipeline = (() => {
         _shakeOffsetY   = 0;
       }
     }
+    _lastFrameTs = now;
 
     const vs = viewState || {};
     const effectiveView = {
