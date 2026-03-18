@@ -34,19 +34,30 @@
  * }
  */
 
+const _resolvedGameState = (() => {
+  if (typeof GameState !== 'undefined') return GameState;
+  if (typeof require === 'function') {
+    try { return require('./engine/GameState.js'); } catch (e) { return null; }
+  }
+  return null;
+})();
+
 const TokenSystem = (() => {
   'use strict';
 
+  const _GS = _resolvedGameState;
+
   // ── Core state ────────────────────────────────────────────────────────────
 
-  let _tokens     = [];
-  let _selectedId = null;
   let _hoveredId  = null;
   let _dragState  = null;
   let _mapWidth   = 20;
   let _mapHeight  = 15;
   let _onSelect   = null;
   let _onAction   = null;
+
+  /** Read selected token ID from GameState (safe — primitive value). */
+  function _selectedId() { return _GS.getSelection().selectedTokenId; }
 
   // ── Visual animation state ─────────────────────────────────────────────────
 
@@ -112,15 +123,24 @@ const TokenSystem = (() => {
   // ── Token CRUD ────────────────────────────────────────────────────────────
 
   function addToken(characterId, name, avatar, hp, maxHp, gridCol, gridRow) {
-    _tokens = _tokens.filter(t => t.characterId !== characterId);
+    // Remove existing token with same characterId
+    const allTokens = _GS.getAllTokens();
+    for (const tid of Object.keys(allTokens)) {
+      if (allTokens[tid].characterId === characterId) {
+        const numId = Number(tid);
+        _GS.applyAction({ type: 'token.remove', payload: { id: numId } });
+        _breathPhases.delete(numId);
+        _selectionEffects.delete(numId);
+      }
+    }
+
     const id = Date.now() + Math.floor(Math.random() * 1e6);
     const resolvedMaxHp = maxHp !== undefined ? maxHp : (hp !== undefined ? hp : 10);
     const resolvedHp    = hp    !== undefined ? hp    : resolvedMaxHp;
 
-    // Assign a unique breath phase so tokens pulse independently
     _breathPhases.set(id, Math.random() * Math.PI * 2);
 
-    _tokens.push({
+    _GS.applyAction({ type: 'token.add', payload: {
       id,
       characterId,
       x:             Math.max(0, Math.min(_mapWidth  - 1, gridCol || 0)),
@@ -142,35 +162,40 @@ const TokenSystem = (() => {
       animState:     'idle',
       lightRadius:   0,
       lerpPosition:  null,
-    });
+    }});
     return id;
   }
 
   function removeToken(id) {
-    _tokens = _tokens.filter(t => t.id !== id);
+    const wasSelected = _selectedId() === id;
+    _GS.applyAction({ type: 'token.remove', payload: { id } });
     _breathPhases.delete(id);
     _selectionEffects.delete(id);
-    if (_selectedId === id) {
-      _selectedId = null;
-      if (_onSelect) _onSelect(null);
-    }
+    if (wasSelected && _onSelect) _onSelect(null);
     if (_hoveredId === id) _hoveredId = null;
   }
 
   function removeTokenByCharId(characterId) {
-    const t = _tokens.find(t => t.characterId === characterId);
-    if (t) removeToken(t.id);
+    const allTokens = _GS.getAllTokens();
+    for (const tid of Object.keys(allTokens)) {
+      if (allTokens[tid].characterId === characterId) {
+        removeToken(Number(tid));
+        return;
+      }
+    }
   }
 
-  function getToken(id)  { return _tokens.find(t => t.id === id) || null; }
-  function getAll()      { return _tokens; }
-  function getSelected() { return _selectedId ? getToken(_selectedId) : null; }
+  function getToken(id)  { return _GS.getToken(id); }
+  function getAll()      { return _GS.getTokensArray(); }
+  function getSelected() {
+    const selId = _selectedId();
+    return selId ? getToken(selId) : null;
+  }
 
   // ── Selection ─────────────────────────────────────────────────────────────
 
   function selectToken(id) {
-    _selectedId = id;
-    // Kick off selection FX for this token
+    _GS.applyAction({ type: 'selection.set', payload: { tokenId: id } });
     _selectionEffects.set(id, {
       rippleRadius: 0,
       rippleAlpha:  0.8,
@@ -181,7 +206,7 @@ const TokenSystem = (() => {
   }
 
   function deselectAll() {
-    _selectedId = null;
+    _GS.applyAction({ type: 'selection.set', payload: { tokenId: null } });
     if (_onSelect) _onSelect(null);
   }
 
@@ -203,7 +228,8 @@ const TokenSystem = (() => {
   function modifyHp(tokenId, delta) {
     const t = getToken(tokenId);
     if (!t) return;
-    t.hp = Math.max(0, Math.min(t.maxHp, t.hp + delta));
+    const newHp = Math.max(0, Math.min(t.maxHp, t.hp + delta));
+    _GS.applyAction({ type: 'token.setHP', payload: { id: tokenId, hp: newHp } });
   }
 
   // ── Pointer handling ──────────────────────────────────────────────────────
@@ -211,8 +237,9 @@ const TokenSystem = (() => {
   function handlePointerDown(worldX, worldY, tileSize) {
     const col = Math.floor(worldX / tileSize);
     const row = Math.floor(worldY / tileSize);
-    for (let i = _tokens.length - 1; i >= 0; i--) {
-      const t = _tokens[i];
+    const tokens = _GS.getTokensArray();
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const t = tokens[i];
       if (t.x === col && t.y === row) {
         selectToken(t.id);
         _dragState = { tokenId: t.id, origX: t.x, origY: t.y };
@@ -226,8 +253,7 @@ const TokenSystem = (() => {
     if (!_dragState) return false;
     const col = Math.max(0, Math.min(_mapWidth  - 1, Math.floor(worldX / tileSize)));
     const row = Math.max(0, Math.min(_mapHeight - 1, Math.floor(worldY / tileSize)));
-    const t = getToken(_dragState.tokenId);
-    if (t) { t.x = col; t.y = row; }
+    _GS.applyAction({ type: 'token.setPosition', payload: { id: _dragState.tokenId, x: col, y: row } });
     return true;
   }
 
@@ -254,8 +280,9 @@ const TokenSystem = (() => {
     const col = Math.floor(worldX / tileSize);
     const row = Math.floor(worldY / tileSize);
     _hoveredId = null;
-    for (let i = _tokens.length - 1; i >= 0; i--) {
-      const t = _tokens[i];
+    const tokens = _GS.getTokensArray();
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const t = tokens[i];
       if (t.x === col && t.y === row) {
         _hoveredId = t.id;
         break;
@@ -287,7 +314,7 @@ const TokenSystem = (() => {
       fx.runeAngle     = (fx.runeAngle + dt * 1.1) % (Math.PI * 2);
 
       // Restart ripple when it fully fades (continuous pulse for selected token)
-      if (id === _selectedId && fx.rippleAlpha <= 0) {
+      if (id === _selectedId() && fx.rippleAlpha <= 0) {
         fx.rippleRadius = 0;
         fx.rippleAlpha  = 0.6;
       }
@@ -544,7 +571,8 @@ const TokenSystem = (() => {
   // ── Main draw pass ────────────────────────────────────────────────────────
 
   function drawTokens(ctx, tileSize) {
-    for (const token of _tokens) {
+    const tokens = _GS.getTokensArray();
+    for (const token of tokens) {
       const lp   = token.lerpPosition;
       const useL = lp && typeof lp.t === 'number' && lp.t < 1;
       const baseX = useL
@@ -555,7 +583,7 @@ const TokenSystem = (() => {
         : token.y * tileSize;
 
       const TS         = tileSize;
-      const isSelected = token.id === _selectedId;
+      const isSelected = token.id === _selectedId();
       const isHovered  = token.id === _hoveredId && !isSelected;
       const cx         = baseX + TS / 2;
       const cy         = baseY + TS / 2;
@@ -677,14 +705,21 @@ const TokenSystem = (() => {
   // ── Smooth movement (lerp) ────────────────────────────────────────────────
 
   function updateLerp(dt) {
-    for (const token of _tokens) {
+    const tokens = _GS.getTokensArray();
+    for (const token of tokens) {
       const lp = token.lerpPosition;
       if (!lp || lp.t >= 1) continue;
       const dur = lp.duration || 0.3;
-      lp.t = Math.min(1, lp.t + dt / dur);
-      if (lp.t >= 1) {
-        token.x = Math.round(lp.toX / (lp._tileSize || 1));
-        token.y = Math.round(lp.toY / (lp._tileSize || 1));
+      const newT = Math.min(1, lp.t + dt / dur);
+      // Update lerpPosition through GameState
+      _GS.applyAction({ type: 'token.update', payload: {
+        id: token.id,
+        lerpPosition: { ...lp, t: newT },
+      }});
+      if (newT >= 1) {
+        const newX = Math.round(lp.toX / (lp._tileSize || 1));
+        const newY = Math.round(lp.toY / (lp._tileSize || 1));
+        _GS.applyAction({ type: 'token.setPosition', payload: { id: token.id, x: newX, y: newY } });
       }
     }
   }
@@ -755,7 +790,7 @@ const TokenSystem = (() => {
   // ── Serialisation ─────────────────────────────────────────────────────────
 
   function serialize() {
-    return _tokens.map(t => ({
+    return _GS.getTokensArray().map(t => ({
       ...t,
       statusEffects: [...(t.statusEffects || [])],
       conditions:    [...(t.conditions    || [])],
@@ -763,7 +798,7 @@ const TokenSystem = (() => {
   }
 
   function deserialize(arr) {
-    _tokens = (arr || []).map(t => ({
+    const tokens = (arr || []).map(t => ({
       ...t,
       statusEffects: [...(t.statusEffects || [])],
       conditions:    [...(t.conditions    || [])],
@@ -779,21 +814,22 @@ const TokenSystem = (() => {
       lightRadius:   t.lightRadius  || 0,
       lerpPosition:  t.lerpPosition || null,
     }));
+    _GS.applyAction({ type: 'token.bulkSet', payload: { tokens } });
     // Re-seed breath phases for deserialized tokens
-    for (const t of _tokens) {
+    for (const t of tokens) {
       if (!_breathPhases.has(t.id)) {
         _breathPhases.set(t.id, Math.random() * Math.PI * 2);
       }
     }
-    _selectedId = null;
+    _GS.applyAction({ type: 'selection.set', payload: { tokenId: null } });
     _selectionEffects.clear();
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
 
   return {
-    get tokens()     { return _tokens;     },
-    get selectedId() { return _selectedId; },
+    get tokens()     { return _GS.getTokensArray(); },
+    get selectedId() { return _selectedId(); },
 
     init,
     setMapSize,
