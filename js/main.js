@@ -531,26 +531,62 @@
       updateSelectedTokenPanel(null);
     });
 
-    // ── Selected token panel ──────────────────────────────────────────────────
+    // ── Context-driven right panel ────────────────────────────────────────────
     const selPanel  = $('#selected-token-panel');
     const selAvatar = $('#sel-token-avatar');
     const selName   = $('#sel-token-name');
     const selHp     = $('#sel-token-hp');
 
+    // Show/hide right-sidebar cards based on current selection context.
+    // data-context="map"   → visible when NO token is selected
+    // data-context="token" → visible when a token IS selected
+    function _setRightPanelContext(hasToken) {
+      $$('#map-sidebar-right .card[data-context]').forEach(card => {
+        const ctx = card.dataset.context;
+        if (ctx === 'token') {
+          card.style.display = hasToken ? '' : 'none';
+        } else if (ctx === 'map') {
+          card.style.display = hasToken ? 'none' : '';
+        }
+      });
+    }
+
     function updateSelectedTokenPanel(tokenId) {
       const token = tokenId ? MapEditor.tokenSystem.getToken(tokenId) : null;
       if (!token) {
-        selPanel.style.display = 'none';
+        _setRightPanelContext(false);
         return;
       }
-      selPanel.style.display = '';
-      selAvatar.textContent  = token.avatar;
-      selName.textContent    = token.name;
-      selHp.textContent      = `HP: ${token.hp} / ${token.maxHp}`;
+      selAvatar.textContent = token.avatar;
+      selName.textContent   = token.name;
+      selHp.textContent     = `HP: ${token.hp} / ${token.maxHp}`;
+      _setRightPanelContext(true);
       refreshTokenList();
     }
 
+    // Initialise context to map (no token selected)
+    _setRightPanelContext(false);
+
     MapEditor.onTokenSelect(updateSelectedTokenPanel);
+
+    // Right-click on map → wire context actions via EventBus
+    if (typeof EventBus !== 'undefined') {
+      EventBus.on('input:contextmenu', (data) => {
+        if (!data) return;
+        if (data.context === 'token' && data.token) {
+          updateSelectedTokenPanel(data.token.id);
+          appendLog(`🖱️ Right-click: ${escHtml(data.token.name)} selected`);
+        } else if (data.context === 'tile' && data.tile) {
+          // Switch to that tile type in the palette
+          MapEditor.selectedTile = data.tile.type;
+          $$('#tile-palette .tile-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.tile === data.tile.type));
+          appendLog(`🖱️ Right-click: selected tile "${data.tile.type}"`);
+        } else if (data.context === 'map') {
+          appendLog('🖱️ Right-click: view reset');
+        }
+      });
+    }
 
     $('#btn-token-heal').addEventListener('click', () => {
       const id = MapEditor.tokenSystem.selectedId;

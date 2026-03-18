@@ -357,8 +357,8 @@
         <!-- ── Right sidebar: context panel ─────────────── -->
         <div id="map-sidebar-right" class="map-sidebar">
 
-          <!-- Token placement -->
-          <div class="card">
+          <!-- Token placement (map context: visible when nothing selected) -->
+          <div class="card" data-context="map">
             <h2>🧙 Tokens</h2>
             <div class="form-group">
               <label for="map-token-char-select">Character</label>
@@ -383,8 +383,8 @@
             <div id="map-token-list" class="token-list mt-8"></div>
           </div>
 
-          <!-- Selected token context -->
-          <div class="card" id="selected-token-panel" style="display:none">
+          <!-- Selected token context (token context: visible when token selected) -->
+          <div class="card" id="selected-token-panel" data-context="token" style="display:none">
             <h2>⚡ Active Token</h2>
             <div class="token-action-header mb-8">
               <span id="sel-token-avatar" style="font-size:2rem">🧝</span>
@@ -406,8 +406,8 @@
             </div>
           </div>
 
-          <!-- Fog of War -->
-          <div class="card">
+          <!-- Fog of War (map context: visible when nothing selected) -->
+          <div class="card" data-context="map">
             <h2>🌫️ Fog</h2>
             <div class="btn-group" style="flex-direction:column;gap:4px;">
               <button class="btn btn-secondary full-width" id="btn-toggle-fog">🌫️ Toggle</button>
@@ -416,8 +416,8 @@
             <div id="fog-status" class="map-info mt-8">Fog: Disabled</div>
           </div>
 
-          <!-- Visual FX -->
-          <div class="card">
+          <!-- Visual FX (map context: visible when nothing selected) -->
+          <div class="card" data-context="map">
             <h2>🎆 FX</h2>
             <div class="btn-group" style="flex-direction:column;gap:4px;">
               <button class="btn btn-secondary full-width fx-btn" data-fx="fire">🔥 Fire</button>
@@ -547,6 +547,7 @@
   <script src="js/FeedbackSystem.js"></script>
   <!-- UI & App -->
   <script src="js/uiControls.js"></script>
+  <script src="js/engine/InteractionManager.js"></script>
   <script src="js/map.js"></script>
   <script src="js/animation.js"></script>
   <script src="js/main.js"></script>

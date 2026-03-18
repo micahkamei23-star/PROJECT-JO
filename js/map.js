@@ -70,8 +70,8 @@ const MapEditor = (() => {
       RenderPipeline.clear();
     }
 
-    // Initialise input layer
-    UIControls.init({
+    // Initialise input layer via InteractionManager (single source of truth)
+    const _imOpts = {
       tileSize:      TILE_SIZE,
       onPaint:       _paintCell,
       onFill:        _fillCell,
@@ -88,8 +88,40 @@ const MapEditor = (() => {
         _updateAllVisionSources();
         _markDirty();
       },
-    });
-    UIControls.bindCanvas(_canvas);
+      // Context callbacks for right-click actions
+      getTokenAt: (wx, wy) => {
+        const col = Math.floor(wx / TILE_SIZE);
+        const row = Math.floor(wy / TILE_SIZE);
+        const tokens = TokenSystem.getAll();
+        for (let i = tokens.length - 1; i >= 0; i--) {
+          if (tokens[i].x === col && tokens[i].y === row) return tokens[i];
+        }
+        return null;
+      },
+      getTileAt: (row, col) => MapEngine.getTile(row, col),
+      onContextToken: (token) => {
+        TokenSystem.selectToken(token.id);
+        _markDirty();
+        if (_onTokenSelect) _onTokenSelect(token.id);
+        if (_hasEventBus) EventBus.emit('token:select', { tokenId: token.id });
+      },
+      onContextTile: (tile, row, col) => {
+        _selectedTile = tile.type;
+        if (_hasEventBus) EventBus.emit('tile:select', { tile: tile, row: row, col: col });
+      },
+      onContextMap: (col, row) => {
+        UIControls.resetView();
+        if (_hasEventBus) EventBus.emit('map:contextmenu', { col: col, row: row });
+      },
+    };
+
+    if (typeof InteractionManager !== 'undefined') {
+      InteractionManager.init(_canvas, _imOpts);
+    } else {
+      // Fallback: direct UIControls wiring
+      UIControls.init(_imOpts);
+      UIControls.bindCanvas(_canvas);
+    }
 
     _lastTs = 0;
     _startLoop();
