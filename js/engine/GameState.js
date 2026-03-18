@@ -29,8 +29,8 @@ const GameState = (() => {
 
   const _EventBus = _resolvedEventBus;
 
-  // ── Dev mode: enabled in non-production environments ─────────────────────
-  const _DEV_MODE = (typeof process !== 'undefined' && process.env &&
+  // ── Dev mode: toggleable for testing ─────────────────────────────────────
+  let _devMode = (typeof process !== 'undefined' && process.env &&
     process.env.NODE_ENV === 'development');
 
   // ── Configuration ────────────────────────────────────────────────────────
@@ -104,8 +104,12 @@ const GameState = (() => {
    * @returns {object}
    */
   function _protect(obj) {
-    if (_DEV_MODE && obj && typeof obj === 'object') {
-      Object.freeze(obj);
+    if (!_devMode || !obj || typeof obj !== 'object') return obj;
+    Object.freeze(obj);
+    // Also freeze nested objects/arrays (one level deep — sufficient for state copies)
+    for (const key of Object.keys(obj)) {
+      const v = obj[key];
+      if (v && typeof v === 'object') Object.freeze(v);
     }
     return obj;
   }
@@ -232,6 +236,26 @@ const GameState = (() => {
     return result;
   }
 
+  /** Get combat budgets for a token (safe copy). */
+  function getCombatBudget(tokenId) {
+    const b = _state.combat.actionBudgets[tokenId];
+    return b ? { ...b } : null;
+  }
+
+  /** Get conditions for a token (safe copy). */
+  function getCombatConditions(tokenId) {
+    const c = _state.combat.conditions[tokenId];
+    return c ? [...c] : [];
+  }
+
+  /**
+   * Get raw tiles reference for bulk read operations (e.g., floodFill).
+   * MUST NOT be mutated — use applyAction('map.setTile') for writes.
+   */
+  function getMapTilesRaw() {
+    return _state.map.tiles;
+  }
+
   // ════════════════════════════════════════════════════════════════════════
   //  INTERNAL HELPERS
   // ════════════════════════════════════════════════════════════════════════
@@ -285,6 +309,27 @@ const GameState = (() => {
 
     _emitChange('state.map.updated', { type: 'setTile', row, col, tileType: actualType });
     return { prev };
+  }
+
+  function _resizeMap(payload) {
+    const w = _clamp(payload.width, 5, 50);
+    const h = _clamp(payload.height, 5, 30);
+    const oldTiles = _state.map.tiles;
+    _state.map.width = w;
+    _state.map.height = h;
+    _state.map.tiles = Array.from({ length: h }, (_, r) =>
+      Array.from({ length: w }, (_, c) =>
+        (oldTiles[r] && oldTiles[r][c]) ? { ...oldTiles[r][c] } : _createTile(null)
+      )
+    );
+    _emitChange('state.map.updated', { type: 'resize', width: w, height: h });
+  }
+
+  function _restoreMap(payload) {
+    _state.map.width = payload.width;
+    _state.map.height = payload.height;
+    _state.map.tiles = payload.tiles.map(row => row.map(t => ({ ...t })));
+    _emitChange('state.map.updated', { type: 'restore' });
   }
 
   // ── Token Mutations ──────────────────────────────────────────────────────
@@ -556,7 +601,7 @@ const GameState = (() => {
    */
   function applyAction(action) {
     if (!action || !action.type) {
-      if (_DEV_MODE) console.warn('GameState: Invalid action (missing type)');
+      if (_devMode) console.warn('GameState: Invalid action (missing type)');
       return;
     }
     _actionQueue.push(action);
@@ -597,6 +642,14 @@ const GameState = (() => {
                        type: inverseData.prev ? inverseData.prev.type : null },
           });
         }
+        break;
+
+      case 'map.resize':
+        _resizeMap(payload);
+        break;
+
+      case 'map.restore':
+        _restoreMap(payload);
         break;
 
       // ── Token ────────────────────────────────────────────────────────
@@ -705,7 +758,7 @@ const GameState = (() => {
         break;
 
       default:
-        if (_DEV_MODE) console.warn('GameState: Unknown action type:', type);
+        if (_devMode) console.warn('GameState: Unknown action type:', type);
     }
   }
 
@@ -776,7 +829,7 @@ const GameState = (() => {
     // ── Event chain depth tracking ─────────────────────────────────────
     _eventChainDepth++;
     if (_eventChainDepth > MAX_CHAIN_DEPTH) {
-      if (_DEV_MODE) {
+      if (_devMode) {
         console.error(
           `GameState: Event chain depth exceeded (${_eventChainDepth}). ` +
           `Possible infinite loop detected. Event: ${event}`
@@ -789,7 +842,7 @@ const GameState = (() => {
     // ── Per-type count tracking ────────────────────────────────────────
     _eventCountsThisChain[event] = (_eventCountsThisChain[event] || 0) + 1;
     if (_eventCountsThisChain[event] > MAX_EVENT_PER_TYPE) {
-      if (_DEV_MODE) {
+      if (_devMode) {
         console.error(
           `GameState: Event type "${event}" fired ${_eventCountsThisChain[event]} ` +
           `times in one chain. Halting chain.`
@@ -943,6 +996,9 @@ const GameState = (() => {
   //  RESET — For testing and initialization
   // ════════════════════════════════════════════════════════════════════════
 
+  /** Toggle dev mode (for testing reference-leak protection). */
+  function setDevMode(enabled) { _devMode = !!enabled; }
+
   /** Reset all state to initial values. */
   function reset() {
     _state.map.width  = 0;
@@ -1009,12 +1065,11 @@ const GameState = (() => {
     // ── Reset ────────────────────────────────────────────────────────
     reset,
 
-    // ── Internal Access (for integrated systems ONLY) ────────────────
-    _getTokensRef,
-    _getMapTilesRef,
-    _getMapRef,
-    _getCombatRef,
-    _getSelectionRef,
+    // ── Safe Internal Access ─────────────────────────────────────────
+    setDevMode,
+    getCombatBudget,
+    getCombatConditions,
+    getMapTilesRaw,
   };
 })();
 
