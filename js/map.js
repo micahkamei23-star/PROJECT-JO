@@ -118,6 +118,16 @@ const MapEditor = (() => {
       UIControls.bindCanvas(_canvas);
     }
 
+    // Listen for hover events emitted by InteractionManager to update token hover state
+    if (_hasEventBus) {
+      EventBus.on('input:hover', function (data) {
+        if (data) {
+          TokenSystem.handlePointerHover(data.worldX, data.worldY, TILE_SIZE);
+          _markDirty();
+        }
+      });
+    }
+
     _lastTs = 0;
     _startLoop();
   }
@@ -182,6 +192,11 @@ const MapEditor = (() => {
       // Update token lerp interpolation
       if (typeof TokenSystem.updateLerp === 'function') {
         TokenSystem.updateLerp(dt);
+      }
+
+      // Update token visual animations (breathing, selection FX, condition badges)
+      if (typeof TokenSystem.updateVisuals === 'function') {
+        TokenSystem.updateVisuals(dt);
       }
 
       // Update particle system
