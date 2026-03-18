@@ -57,10 +57,7 @@ const InteractionManager = (() => {
 
     // Wrap pointer callbacks to also emit EventBus events,
     // then pass the augmented opts to UIControls.
-    var wrappedOpts = {};
-    for (var k in opts) {
-      if (Object.prototype.hasOwnProperty.call(opts, k)) wrappedOpts[k] = opts[k];
-    }
+    const wrappedOpts = Object.assign({}, opts);
 
     wrappedOpts.onPointerDown = function (wx, wy) {
       var col      = Math.floor(wx / _tileSize);
