@@ -257,6 +257,8 @@ const GameState = (() => {
   /**
    * Get raw tiles reference for bulk read operations (e.g., floodFill).
    * MUST NOT be mutated — use applyAction('map.setTile') for writes.
+   *
+   * NOTE: UNUSED at runtime. All tile reads go through MapEngine.mapState.
    */
   function getMapTilesRaw() {
     return _state.map.tiles;
@@ -284,6 +286,11 @@ const GameState = (() => {
   // ════════════════════════════════════════════════════════════════════════
 
   // ── Map Mutations ────────────────────────────────────────────────────────
+  // NOTE: These map actions (map.init, map.setTile, map.resize, map.restore)
+  // are UNUSED in runtime. MapEngine is the sole source of truth for tile
+  // data — all rendering, fog, and UI read from MapEngine.mapState.
+  // These handlers are retained only for test coverage and potential future
+  // unification. Do NOT call them from new code; use MapEngine instead.
 
   function _initMap(payload) {
     const w = _clamp(payload.width  || 20, 5, 50);
@@ -633,13 +640,15 @@ const GameState = (() => {
     let inverseData = null;
 
     switch (type) {
-      // ── Map ──────────────────────────────────────────────────────────
+      // ── Map (UNUSED at runtime — MapEngine is the sole tile authority) ──
       case 'map.init':
+        if (_devMode) console.warn('GameState: map.init is deprecated — use MapEngine.initMap() instead');
         _initMap(payload);
         // No meaningful inverse for init
         break;
 
       case 'map.setTile':
+        if (_devMode) console.warn('GameState: map.setTile is deprecated — use MapEngine.setTile() instead');
         inverseData = _setTile(payload);
         if (inverseData) {
           _pushHistory(type, payload, {
@@ -651,10 +660,12 @@ const GameState = (() => {
         break;
 
       case 'map.resize':
+        if (_devMode) console.warn('GameState: map.resize is deprecated — use MapEngine.resize() instead');
         _resizeMap(payload);
         break;
 
       case 'map.restore':
+        if (_devMode) console.warn('GameState: map.restore is deprecated — use MapEngine for tile state');
         _restoreMap(payload);
         break;
 
