@@ -952,46 +952,6 @@ const GameState = (() => {
   //  Systems should use these for performance-critical paths.
   // ════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Get a direct reference to the internal tokens map.
-   * WARNING: For internal system use only. Do NOT mutate.
-   */
-  function _getTokensRef() {
-    return _state.tokens;
-  }
-
-  /**
-   * Get a direct reference to the internal map tiles.
-   * WARNING: For internal system use only. Do NOT mutate.
-   */
-  function _getMapTilesRef() {
-    return _state.map.tiles;
-  }
-
-  /**
-   * Get a direct reference to the internal combat state.
-   * WARNING: For internal system use only. Do NOT mutate.
-   */
-  function _getCombatRef() {
-    return _state.combat;
-  }
-
-  /**
-   * Get a direct reference to the internal selection state.
-   * WARNING: For internal system use only. Do NOT mutate.
-   */
-  function _getSelectionRef() {
-    return _state.selection;
-  }
-
-  /**
-   * Get a direct reference to the internal map state.
-   * WARNING: For internal system use only. Do NOT mutate.
-   */
-  function _getMapRef() {
-    return _state.map;
-  }
-
   // ════════════════════════════════════════════════════════════════════════
   //  RESET — For testing and initialization
   // ════════════════════════════════════════════════════════════════════════
