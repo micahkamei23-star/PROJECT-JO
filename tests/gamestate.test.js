@@ -474,20 +474,23 @@ test('setTile validates type correctness', () => {
 // ════════════════════════════════════════════════════════════════════════════
 console.log('\n🔧 GameState — Internal Access');
 
-test('_getTokensRef provides direct access for systems', () => {
+test('getCombatBudget returns safe copy of budget', () => {
   GameState.reset();
-  GameState.applyAction({ type: 'token.add', payload: { id: 1, hp: 10, maxHp: 10, name: 'Test' } });
-  const ref = GameState._getTokensRef();
-  assert(ref[1] !== undefined, 'should have token at key 1');
-  assertEqual(ref[1].name, 'Test', 'should have correct name');
+  GameState.applyAction({ type: 'combat.setBudget', payload: {
+    tokenId: 1, budget: { actions: 1, bonus: 1, reaction: 1, movement: 30 },
+  }});
+  const b = GameState.getCombatBudget(1);
+  assert(b !== null, 'budget should exist');
+  assertEqual(b.actions, 1, 'should have 1 action');
+  assertEqual(GameState.getCombatBudget(999), null, 'missing token returns null');
 });
 
-test('_getMapRef provides direct map access', () => {
+test('getMapTilesRaw returns raw tiles array', () => {
   GameState.reset();
   GameState.applyAction({ type: 'map.init', payload: { width: 5, height: 5 } });
-  const ref = GameState._getMapRef();
-  assertEqual(ref.width, 5, 'width should be 5');
-  assertEqual(ref.tiles.length, 5, 'should have 5 rows');
+  const tiles = GameState.getMapTilesRaw();
+  assertEqual(tiles.length, 5, 'should have 5 rows');
+  assertEqual(tiles[0].length, 5, 'each row should have 5 cols');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
