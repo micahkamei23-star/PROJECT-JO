@@ -101,17 +101,12 @@ const MapEditor = (() => {
       getTileAt: (row, col) => MapEngine.getTile(row, col),
       onContextToken: (token) => {
         TokenSystem.selectToken(token.id);
-        _markDirty();
-        if (_onTokenSelect) _onTokenSelect(token.id);
-        if (_hasEventBus) EventBus.emit('token:select', { tokenId: token.id });
       },
       onContextTile: (tile, row, col) => {
         _selectedTile = tile.type;
-        if (_hasEventBus) EventBus.emit('tile:select', { tile: tile, row: row, col: col });
       },
       onContextMap: (col, row) => {
         UIControls.resetView();
-        if (_hasEventBus) EventBus.emit('map:contextmenu', { col: col, row: row });
       },
     };
 

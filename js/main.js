@@ -574,7 +574,6 @@
       EventBus.on('input:contextmenu', (data) => {
         if (!data) return;
         if (data.context === 'token' && data.token) {
-          updateSelectedTokenPanel(data.token.id);
           appendLog(`🖱️ Right-click: ${escHtml(data.token.name)} selected`);
         } else if (data.context === 'tile' && data.tile) {
           // Switch to that tile type in the palette
