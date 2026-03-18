@@ -75,6 +75,9 @@ const InteractionManager = (() => {
       var consumed = opts.onPointerMove ? opts.onPointerMove(wx, wy) : false;
       if (_hasEventBus) {
         EventBus.emit('input:pointermove', { worldX: wx, worldY: wy, col: col, row: row, consumed: consumed });
+        if (!consumed) {
+          EventBus.emit('input:hover', { worldX: wx, worldY: wy, col: col, row: row });
+        }
       }
       return consumed;
     };
