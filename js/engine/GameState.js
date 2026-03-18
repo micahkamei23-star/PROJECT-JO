@@ -105,11 +105,17 @@ const GameState = (() => {
    */
   function _protect(obj) {
     if (!_devMode || !obj || typeof obj !== 'object') return obj;
+    return _deepFreeze(obj);
+  }
+
+  /** Recursively freeze an object and all nested objects/arrays. */
+  function _deepFreeze(obj) {
+    if (!obj || typeof obj !== 'object' || Object.isFrozen(obj)) return obj;
     Object.freeze(obj);
-    // Also freeze nested objects/arrays (one level deep — sufficient for state copies)
-    for (const key of Object.keys(obj)) {
-      const v = obj[key];
-      if (v && typeof v === 'object') Object.freeze(v);
+    const keys = Object.keys(obj);
+    for (let i = 0; i < keys.length; i++) {
+      const v = obj[keys[i]];
+      if (v && typeof v === 'object') _deepFreeze(v);
     }
     return obj;
   }
