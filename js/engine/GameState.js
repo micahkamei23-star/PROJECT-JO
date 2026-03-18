@@ -302,6 +302,7 @@ const GameState = (() => {
     const prev = token[field];
     // Array field: shallow copy for comparison
     if (Array.isArray(value)) {
+      if (Array.isArray(prev) && prev === value) return; // same reference
       if (Array.isArray(prev) && prev.length === value.length && prev.every((v, i) => v === value[i])) return;
       token[field] = [...value];
     } else {

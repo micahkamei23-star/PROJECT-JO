@@ -765,6 +765,7 @@ const TokenSystem = (() => {
         const finalX = Math.round(lp.toX / (lp._tileSize || 1));
         const finalY = Math.round(lp.toY / (lp._tileSize || 1));
         gs.applyAction({ type: 'token.setPosition', payload: { id: token.id, x: finalX, y: finalY } });
+        if (trans) trans.lerpPosition = null;
       }
     }
   }
