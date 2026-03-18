@@ -10,8 +10,18 @@
  * }
  */
 
+const _resolvedGameState2 = (() => {
+  if (typeof GameState !== 'undefined') return GameState;
+  if (typeof require === 'function') {
+    try { return require('./engine/GameState.js'); } catch (e) { return null; }
+  }
+  return null;
+})();
+
 const CombatSystem = (() => {
   'use strict';
+
+  const _GS = _resolvedGameState2;
 
   /** D&D 5e condition list. */
   const CONDITIONS = [
@@ -20,19 +30,7 @@ const CombatSystem = (() => {
     'prone', 'restrained', 'stunned', 'unconscious', 'exhaustion',
   ];
 
-  const _combatState = {
-    active:      false,
-    round:       1,
-    turnOrder:   [],
-    currentTurn: 0,
-  };
-
   let _onUpdate = null;   // (snapshot) => void
-
-  // Action economy per participant: tokenId → budget
-  const _actionBudgets = {};
-  // Conditions per token: tokenId → Set<string>
-  const _conditions = {};
 
   function _defaultBudget() {
     return { actions: 1, bonus: 1, reaction: 1, movement: 30 };
@@ -65,14 +63,19 @@ const CombatSystem = (() => {
 
     order.sort((a, b) => b.initiative - a.initiative);
 
-    _combatState.turnOrder   = order;
-    _combatState.currentTurn = 0;
-    _combatState.round       = 1;
-    _combatState.active      = true;
+    _GS.applyAction({ type: 'combat.setState', payload: {
+      active: true,
+      turnOrder: order,
+      currentTurnIndex: 0,
+      round: 1,
+    }});
 
     // Initialise action budgets for all participants
     for (const p of order) {
-      _actionBudgets[p.id] = _defaultBudget();
+      _GS.applyAction({ type: 'combat.setBudget', payload: {
+        tokenId: p.id,
+        budget: _defaultBudget(),
+      }});
     }
 
     _notify();
@@ -86,17 +89,25 @@ const CombatSystem = (() => {
    * @returns {object|null} The new current participant.
    */
   function nextTurn() {
-    if (!_combatState.active || _combatState.turnOrder.length === 0) return null;
+    const cs = _GS.getCombat();
+    if (!cs.active || cs.turnOrder.length === 0) return null;
 
-    _combatState.currentTurn =
-      (_combatState.currentTurn + 1) % _combatState.turnOrder.length;
+    let newIndex = (cs.currentTurnIndex + 1) % cs.turnOrder.length;
+    let newRound = cs.round;
+    if (newIndex === 0) newRound++;
 
-    if (_combatState.currentTurn === 0) _combatState.round++;
+    _GS.applyAction({ type: 'combat.setState', payload: {
+      currentTurnIndex: newIndex,
+      round: newRound,
+    }});
 
     // Reset action budget for the new active participant
     const cur = getCurrentParticipant();
     if (cur) {
-      _actionBudgets[cur.id] = _defaultBudget();
+      _GS.applyAction({ type: 'combat.setBudget', payload: {
+        tokenId: cur.id,
+        budget: _defaultBudget(),
+      }});
     }
 
     _notify();
@@ -105,22 +116,22 @@ const CombatSystem = (() => {
 
   /** End combat and reset state. */
   function endCombat() {
-    _combatState.active      = false;
-    _combatState.turnOrder   = [];
-    _combatState.currentTurn = 0;
-    _combatState.round       = 1;
-    // Clear action budgets (keep conditions across combats)
-    for (const key of Object.keys(_actionBudgets)) {
-      delete _actionBudgets[key];
-    }
+    _GS.applyAction({ type: 'combat.setState', payload: {
+      active: false,
+      turnOrder: [],
+      currentTurnIndex: 0,
+      round: 1,
+    }});
+    _GS.applyAction({ type: 'combat.clearBudgets', payload: {} });
     _notify();
   }
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
   function getCurrentParticipant() {
-    if (!_combatState.active || _combatState.turnOrder.length === 0) return null;
-    return _combatState.turnOrder[_combatState.currentTurn] || null;
+    const cs = _GS.getCombat();
+    if (!cs.active || cs.turnOrder.length === 0) return null;
+    return cs.turnOrder[cs.currentTurnIndex] || null;
   }
 
   function isActiveTurn(tokenId) {
@@ -138,11 +149,11 @@ const CombatSystem = (() => {
    * @returns {boolean} true if the resource was successfully consumed
    */
   function useAction(tokenId, cost, amount) {
-    const budget = _actionBudgets[tokenId];
+    const budget = _GS.getCombatBudget(tokenId);
     if (!budget || !(cost in budget)) return false;
     const amt = amount !== undefined ? amount : 1;
     if (budget[cost] < amt) return false;
-    budget[cost] -= amt;
+    _GS.applyAction({ type: 'combat.useAction', payload: { tokenId, cost, amount: amt } });
     return true;
   }
 
@@ -152,7 +163,7 @@ const CombatSystem = (() => {
    * @returns {object|null} budget object or null
    */
   function getRemainingBudget(tokenId) {
-    return _actionBudgets[tokenId] ? { ..._actionBudgets[tokenId] } : null;
+    return _GS.getCombatBudget(tokenId);
   }
 
   // ── Conditions ────────────────────────────────────────────────────────────
@@ -163,8 +174,7 @@ const CombatSystem = (() => {
    * @param {string} condition
    */
   function addCondition(tokenId, condition) {
-    if (!_conditions[tokenId]) _conditions[tokenId] = new Set();
-    _conditions[tokenId].add(condition);
+    _GS.applyAction({ type: 'combat.addCondition', payload: { tokenId, condition } });
   }
 
   /**
@@ -173,8 +183,7 @@ const CombatSystem = (() => {
    * @param {string} condition
    */
   function removeCondition(tokenId, condition) {
-    if (!_conditions[tokenId]) return;
-    _conditions[tokenId].delete(condition);
+    _GS.applyAction({ type: 'combat.removeCondition', payload: { tokenId, condition } });
   }
 
   /**
@@ -183,23 +192,34 @@ const CombatSystem = (() => {
    * @returns {string[]}
    */
   function getConditions(tokenId) {
-    return _conditions[tokenId] ? [..._conditions[tokenId]] : [];
+    return _GS.getCombatConditions(tokenId);
   }
 
   // ── Internal ───────────────────────────────────────────────────────────────
 
   function _notify() {
     if (_onUpdate) {
+      const cs = _GS.getCombat();
       _onUpdate({
-        ..._combatState,
-        turnOrder: _combatState.turnOrder.map(p => ({ ...p })),
+        active: cs.active,
+        round: cs.round,
+        turnOrder: cs.turnOrder.map(p => ({ ...p })),
+        currentTurn: cs.currentTurnIndex,
       });
     }
   }
 
   return {
     CONDITIONS,
-    get combatState() { return _combatState; },
+    get combatState() {
+      const cs = _GS.getCombat();
+      return {
+        active: cs.active,
+        round: cs.round,
+        turnOrder: cs.turnOrder,
+        currentTurn: cs.currentTurnIndex,
+      };
+    },
     init,
     rollInitiativeForTokens,
     nextTurn,
